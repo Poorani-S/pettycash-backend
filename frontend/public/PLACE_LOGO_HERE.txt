@@ -1,0 +1,20 @@
+KAMBAA LOGO PLACEMENT
+=====================
+
+Please save the Kambaa logo image (the one you just shared) as:
+
+Filename: kambaa-logo.png
+Location: This folder (frontend/public/)
+
+The logo should be:
+- Named exactly: kambaa-logo.png
+- In PNG format with transparent background (recommended)
+- Placed in: frontend/public/ directory
+
+The app is already configured to use this logo on:
+✓ Login page (top center)
+✓ Dashboard header (top left)
+
+Once you save the image here, it will automatically appear in the application!
+
+Current path: C:\Users\Admin\OneDrive\Desktop\Project\Petty Cash - SOW\petty-cash-app\frontend\public\kambaa-logo.png

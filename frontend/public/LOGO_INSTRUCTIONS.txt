@@ -1,0 +1,24 @@
+KAMBAA LOGO PLACEMENT INSTRUCTIONS
+===================================
+
+Please save the Kambaa logo image as:
+/public/kambaa-logo.png
+
+The logo should be:
+- In PNG format (with transparent background preferred)
+- Named: kambaa-logo.png
+- Placed in: frontend/public/ directory
+
+The logo is now configured to display on:
+1. Login page (top center)
+2. Dashboard header (top left)
+
+File formats supported: .png, .jpg, .jpeg, .svg
+
+Current path: /kambaa-logo.png
+
+If the logo doesn't display, check:
+1. File exists in frontend/public/kambaa-logo.png
+2. File name matches exactly (case-sensitive)
+3. Image format is valid
+4. Run the development server with: npm run dev
