@@ -1,50 +1,5 @@
-const nodemailer = require("nodemailer");
+const { sendEmail } = require("./emailService");
 const User = require("../models/User");
-
-// Email configuration with fallback options for cloud hosting
-const createTransporter = () => {
-  // Try port 465 with SSL first (better for cloud providers like Render)
-  const port = parseInt(process.env.EMAIL_PORT) || 587;
-  const isSecure = port === 465;
-
-  return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || "smtp.gmail.com",
-    port: port,
-    secure: isSecure, // true for 465, false for other ports
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD,
-    },
-    connectionTimeout: 10000, // 10 seconds
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-    debug: process.env.NODE_ENV === "development",
-    logger: process.env.NODE_ENV === "development",
-  });
-};
-
-const transporter = createTransporter();
-
-/**
- * Send email notification
- */
-const sendEmail = async (to, subject, htmlContent) => {
-  try {
-    const mailOptions = {
-      from: process.env.EMAIL_FROM || "Pettica$h <noreply@petticash.com>",
-      to,
-      subject,
-      html: htmlContent,
-    };
-
-    await transporter.sendMail(mailOptions);
-    console.log(`Email sent to: ${to}`);
-    return { success: true };
-  } catch (error) {
-    console.error("Email send error:", error);
-    return { success: false, error: error.message };
-  }
-};
 
 /**
  * Notify approver about new expense submission
