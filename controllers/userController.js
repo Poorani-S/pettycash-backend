@@ -420,7 +420,11 @@ exports.deactivateUser = async (req, res) => {
 // @access  Private (Admin)
 exports.resendInvitation = async (req, res) => {
   try {
+    console.log("=== RESEND INVITATION START ===");
+    console.log("User ID:", req.params.id);
+
     const user = await User.findById(req.params.id);
+    console.log("User found:", user ? user.email : "NOT FOUND");
 
     if (!user) {
       return res
@@ -435,15 +439,21 @@ exports.resendInvitation = async (req, res) => {
       });
     }
 
-    // Send invitation email
-    const emailResult = await sendUserInvitation(user);
+    console.log("Calling sendUserInvitation for:", user.email);
+
+    // Send invitation email (no password needed for OTP-based auth)
+    const emailResult = await sendUserInvitation(user, null);
+
+    console.log("Email result:", emailResult);
 
     if (emailResult.success) {
+      console.log("✅ Email sent successfully");
       res.status(200).json({
         success: true,
         message: "Invitation email sent successfully to " + user.email,
       });
     } else {
+      console.error("❌ Email send failed:", emailResult.error);
       res.status(500).json({
         success: false,
         message:
@@ -452,6 +462,7 @@ exports.resendInvitation = async (req, res) => {
       });
     }
   } catch (error) {
+    console.error("❌ Resend invitation error:", error);
     res.status(500).json({ success: false, message: error.message });
   }
 };

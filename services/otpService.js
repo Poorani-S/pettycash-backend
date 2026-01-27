@@ -1,15 +1,27 @@
 const nodemailer = require("nodemailer");
 
-// Email configuration
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || "smtp.gmail.com",
-  port: process.env.EMAIL_PORT || 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
-  },
-});
+// Email configuration with fallback options for cloud hosting
+const createTransporter = () => {
+  const port = parseInt(process.env.EMAIL_PORT) || 587;
+  const isSecure = port === 465;
+
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || "smtp.gmail.com",
+    port: port,
+    secure: isSecure, // true for 465, false for other ports
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+    debug: process.env.NODE_ENV === "development",
+    logger: process.env.NODE_ENV === "development",
+  });
+};
+
+const transporter = createTransporter();
 
 // Generate 6-digit OTP
 const generateOTP = () => {
