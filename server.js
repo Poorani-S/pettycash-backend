@@ -10,22 +10,57 @@ dotenv.config();
 // Initialize express app
 const app = express();
 
-// Connect to database (optional for now)
+// Connect to database
 connectDB().catch((err) => {
-  console.log("Starting server without database connection...");
+  console.error("Database connection failed. Starting server without DB...");
+  if (process.env.NODE_ENV === "production") {
+    console.error("Warning: Production server running without database!");
+  }
 });
 
+// CORS Configuration
+const corsOptions = {
+  origin:
+    process.env.CORS_ORIGIN ||
+    process.env.FRONTEND_URL ||
+    "http://localhost:3000",
+  credentials: true,
+  optionsSuccessStatus: 200,
+};
+
 // Middleware
-app.use(cors());
-app.use(express.json());
-app.use(express.urlencoded({ extended: true }));
+app.use(cors(corsOptions));
+app.use(express.json({ limit: "10mb" }));
+app.use(express.urlencoded({ extended: true, limit: "10mb" }));
+
+// Security Headers
+app.use((req, res, next) => {
+  res.setHeader("X-Content-Type-Options", "nosniff");
+  res.setHeader("X-Frame-Options", "DENY");
+  res.setHeader("X-XSS-Protection", "1; mode=block");
+  next();
+});
 
 // Serve uploaded files statically
 app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
-// Routes
+// Health check endpoint
 app.get("/", (req, res) => {
-  res.json({ message: "Petty Cash API is running...", version: "1.0.0" });
+  res.json({
+    success: true,
+    message: "Petty Cash API is running...",
+    version: "1.0.0",
+    environment: process.env.NODE_ENV || "development",
+  });
+});
+
+// API health check
+app.get("/api/health", (req, res) => {
+  res.json({
+    success: true,
+    status: "healthy",
+    timestamp: new Date().toISOString(),
+  });
 });
 
 // API Routes
@@ -38,17 +73,40 @@ app.use("/api/fund-transfers", require("./routes/fundTransferRoutes"));
 app.use("/api/clients", require("./routes/clientRoutes"));
 app.use("/api/user-activity", require("./routes/userActivityRoutes"));
 
+// 404 handler
+app.use((req, res) => {
+  res.status(404).json({
+    success: false,
+    message: "Route not found",
+  });
+});
+
 // Error handling middleware
 app.use((err, req, res, next) => {
-  console.error(err.stack);
-  res.status(500).json({
+  console.error("Error:", err.stack);
+  res.status(err.status || 500).json({
     success: false,
-    message: "Server Error",
-    error: process.env.NODE_ENV === "development" ? err.message : undefined,
+    message: err.message || "Server Error",
+    error: process.env.NODE_ENV === "development" ? err.stack : undefined,
   });
 });
 
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log(
+    `✅ Server running in ${process.env.NODE_ENV || "development"} mode on port ${PORT}`,
+  );
+  console.log(`✅ CORS enabled for: ${corsOptions.origin}`);
 });
+
+// Handle unhandled promise rejections
+process.on("unhandledRejection", (err) => {
+  console.error("Unhandled Promise Rejection:", err);
+  if (process.env.NODE_ENV === "production") {
+    // In production, you might want to restart the server
+    console.error("Shutting down server due to unhandled rejection...");
+    process.exit(1);
+  }
+});
+
+module.exports = app;
