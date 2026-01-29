@@ -13,6 +13,7 @@ const {
   simpleApproveTransaction,
   simpleRejectTransaction,
   requestAdditionalInfo,
+  sendCEOReport,
 } = require("../controllers/transactionController");
 const { protect, authorize } = require("../middleware/authMiddleware");
 const {
@@ -24,6 +25,9 @@ router
   .route("/")
   .get(protect, getTransactions)
   .post(protect, uploadMultiple, handleUploadError, createTransaction);
+
+// CEO Report endpoint - must be before /:id routes
+router.post("/send-ceo-report", protect, authorize("admin"), sendCEOReport);
 
 router
   .route("/:id")

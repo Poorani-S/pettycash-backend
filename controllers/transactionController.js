@@ -1,6 +1,7 @@
 const Transaction = require("../models/Transaction");
 const Category = require("../models/Category");
 const Budget = require("../models/Budget");
+const Balance = require("../models/Balance");
 const User = require("../models/User");
 const { createAuditLog } = require("../middleware/auditMiddleware");
 const { deleteFile, formatFileUrl } = require("../utils/fileUtils");
@@ -24,6 +25,17 @@ const {
   notifyAdditionalInfoRequested,
 } = notificationService;
 
+// Report service - load only if available
+let reportService;
+try {
+  reportService = require("../services/reportService");
+} catch (error) {
+  console.warn("Report service not available:", error.message);
+  reportService = {
+    sendAdminReportToCEO: async () => ({ success: false }),
+  };
+}
+
 // @desc    Get all transactions
 // @route   GET /api/transactions
 // @access  Private
@@ -34,17 +46,21 @@ exports.getTransactions = async (req, res) => {
     // Build query
     let query = {};
 
-    // Role-based filtering
-    if (req.user.role === "handler") {
-      // Handlers can only see their own transactions
+    // Role-based filtering - Follow hierarchy
+    if (
+      req.user.role === "employee" ||
+      req.user.role === "intern" ||
+      req.user.role === "handler"
+    ) {
+      // Employees, interns, and handlers can only see their own transactions
       query.$or = [
         { submittedBy: req.user._id },
         { requestedBy: req.user._id },
       ];
-    } else if (req.user.role === "manager") {
+    } else if (req.user.role === "manager" || req.user.role === "approver") {
       // Managers can see:
       // 1. Their own transactions
-      // 2. Transactions submitted by their team members (employees/interns)
+      // 2. Transactions submitted by their team members (employees/interns under them)
       const teamMembers = await User.find({ managerId: req.user._id }, "_id");
       const teamMemberIds = teamMembers.map((member) => member._id);
 
@@ -55,7 +71,7 @@ exports.getTransactions = async (req, res) => {
         { requestedBy: { $in: teamMemberIds } },
       ];
     }
-    // Admin can see all transactions
+    // Admin, custodian, and auditor can see all transactions
 
     if (status) query.status = status;
     if (category) query.category = category;
@@ -112,8 +128,12 @@ exports.getTransaction = async (req, res) => {
         .json({ success: false, message: "Transaction not found" });
     }
 
-    // Check access rights - handlers can only view their own transactions
-    if (req.user.role === "handler") {
+    // Check access rights - employees and interns can only view their own transactions
+    if (
+      req.user.role === "employee" ||
+      req.user.role === "intern" ||
+      req.user.role === "handler"
+    ) {
       const isOwner =
         transaction.submittedBy?._id.toString() === req.user._id.toString() ||
         transaction.requestedBy?._id.toString() === req.user._id.toString();
@@ -124,7 +144,32 @@ exports.getTransaction = async (req, res) => {
           message: "Not authorized to view this transaction",
         });
       }
+    } else if (req.user.role === "manager" || req.user.role === "approver") {
+      // Managers can view their own transactions and their team members' transactions
+      const isOwner =
+        transaction.submittedBy?._id.toString() === req.user._id.toString() ||
+        transaction.requestedBy?._id.toString() === req.user._id.toString();
+
+      if (!isOwner) {
+        // Check if transaction belongs to a team member
+        const teamMembers = await User.find({ managerId: req.user._id }, "_id");
+        const teamMemberIds = teamMembers.map((member) =>
+          member._id.toString(),
+        );
+
+        const isTeamTransaction =
+          teamMemberIds.includes(transaction.submittedBy?._id.toString()) ||
+          teamMemberIds.includes(transaction.requestedBy?._id.toString());
+
+        if (!isTeamTransaction) {
+          return res.status(403).json({
+            success: false,
+            message: "Not authorized to view this transaction",
+          });
+        }
+      }
     }
+    // Admin, custodian, and auditor can view all transactions
 
     res.status(200).json({
       success: true,
@@ -722,8 +767,9 @@ exports.markAsPaid = async (req, res) => {
 // @access  Private (Admin)
 exports.simpleApproveTransaction = async (req, res) => {
   try {
-    const Balance = require("../models/Balance");
-    const transaction = await Transaction.findById(req.params.id);
+    const transaction = await Transaction.findById(req.params.id)
+      .populate("submittedBy", "_id name email role managerId")
+      .populate("requestedBy", "_id name email role managerId");
 
     if (!transaction) {
       return res
@@ -732,23 +778,73 @@ exports.simpleApproveTransaction = async (req, res) => {
     }
 
     if (transaction.status !== "pending") {
-      return res
-        .status(400)
-        .json({ success: false, message: "Transaction is not pending" });
+      return res.status(400).json({
+        success: false,
+        message: `Transaction cannot be approved. Current status: ${transaction.status}. Only pending transactions can be approved.`,
+      });
+    }
+
+    // For managers, verify the transaction belongs to their team member
+    if (req.user.role === "manager") {
+      const submittedByManagerId =
+        transaction.submittedBy?.managerId?.toString();
+      const requestedByManagerId =
+        transaction.requestedBy?.managerId?.toString();
+      const currentUserId = req.user._id.toString();
+
+      const isOwnTransaction =
+        transaction.submittedBy?._id.toString() === currentUserId ||
+        transaction.requestedBy?._id.toString() === currentUserId;
+
+      const isTeamTransaction =
+        submittedByManagerId === currentUserId ||
+        requestedByManagerId === currentUserId;
+
+      console.log("Manager approval check:", {
+        managerId: currentUserId,
+        submittedBy: transaction.submittedBy?.name,
+        submittedByManagerId,
+        requestedBy: transaction.requestedBy?.name,
+        requestedByManagerId,
+        isOwnTransaction,
+        isTeamTransaction,
+      });
+
+      if (!isOwnTransaction && !isTeamTransaction) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "Not authorized to approve this transaction. You can only approve transactions from your team members or your own transactions.",
+        });
+      }
     }
 
     // Update balance - deduct the expense
-    const balance = await Balance.findOne();
-    if (!balance || balance.currentBalance < transaction.postTaxAmount) {
+    let balance = await Balance.findOne();
+
+    // Create default balance if it doesn't exist
+    if (!balance) {
+      balance = await Balance.create({
+        accountType: "petty_cash_bank",
+        currentBalance: 1000000, // Default 10 lakh initial balance
+        totalReceived: 1000000,
+        totalSpent: 0,
+        updatedBy: req.user._id,
+      });
+      console.log("Created default balance:", balance);
+    }
+
+    if (balance.currentBalance < transaction.postTaxAmount) {
       return res.status(400).json({
         success: false,
-        message: "Insufficient balance to approve this transaction",
+        message: `Insufficient balance to approve this transaction. Current balance: ₹${balance.currentBalance.toLocaleString("en-IN")}, Required: ₹${transaction.postTaxAmount.toLocaleString("en-IN")}`,
       });
     }
 
     balance.currentBalance -= transaction.postTaxAmount;
+    balance.totalSpent = (balance.totalSpent || 0) + transaction.postTaxAmount;
     balance.lastUpdated = new Date();
-    balance.lastUpdatedBy = req.user._id;
+    balance.updatedBy = req.user._id;
     await balance.save();
 
     // Update transaction status
@@ -772,6 +868,16 @@ exports.simpleApproveTransaction = async (req, res) => {
       console.error("Notification error:", notifError);
     }
 
+    // Send admin report to CEO if action was performed by admin
+    if (req.user.role === "admin") {
+      try {
+        await reportService.sendAdminReportToCEO(req.user._id);
+        console.log("Admin report sent to CEO after approval");
+      } catch (reportError) {
+        console.error("Report error:", reportError);
+      }
+    }
+
     res.status(200).json({
       success: true,
       message: "Transaction approved successfully",
@@ -779,7 +885,13 @@ exports.simpleApproveTransaction = async (req, res) => {
       newBalance: balance.currentBalance,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Transaction approval error:", error);
+    res.status(500).json({
+      success: false,
+      message:
+        error.message || "Failed to approve transaction. Please try again.",
+      error: process.env.NODE_ENV === "development" ? error.stack : undefined,
+    });
   }
 };
 
@@ -789,7 +901,9 @@ exports.simpleApproveTransaction = async (req, res) => {
 exports.simpleRejectTransaction = async (req, res) => {
   try {
     const { comment } = req.body;
-    const transaction = await Transaction.findById(req.params.id);
+    const transaction = await Transaction.findById(req.params.id)
+      .populate("submittedBy", "_id name email role managerId")
+      .populate("requestedBy", "_id name email role managerId");
 
     if (!transaction) {
       return res
@@ -798,15 +912,58 @@ exports.simpleRejectTransaction = async (req, res) => {
     }
 
     if (transaction.status !== "pending") {
-      return res
-        .status(400)
-        .json({ success: false, message: "Transaction is not pending" });
+      return res.status(400).json({
+        success: false,
+        message: `Transaction cannot be rejected. Current status: ${transaction.status}. Only pending transactions can be rejected.`,
+      });
+    }
+
+    if (!comment || comment.trim() === "") {
+      return res.status(400).json({
+        success: false,
+        message: "Rejection reason/comment is required",
+      });
+    }
+
+    // For managers, verify the transaction belongs to their team member
+    if (req.user.role === "manager") {
+      const submittedByManagerId =
+        transaction.submittedBy?.managerId?.toString();
+      const requestedByManagerId =
+        transaction.requestedBy?.managerId?.toString();
+      const currentUserId = req.user._id.toString();
+
+      const isOwnTransaction =
+        transaction.submittedBy?._id.toString() === currentUserId ||
+        transaction.requestedBy?._id.toString() === currentUserId;
+
+      const isTeamTransaction =
+        submittedByManagerId === currentUserId ||
+        requestedByManagerId === currentUserId;
+
+      console.log("Manager rejection check:", {
+        managerId: currentUserId,
+        submittedBy: transaction.submittedBy?.name,
+        submittedByManagerId,
+        requestedBy: transaction.requestedBy?.name,
+        requestedByManagerId,
+        isOwnTransaction,
+        isTeamTransaction,
+      });
+
+      if (!isOwnTransaction && !isTeamTransaction) {
+        return res.status(403).json({
+          success: false,
+          message:
+            "Not authorized to reject this transaction. You can only reject transactions from your team members or your own transactions.",
+        });
+      }
     }
 
     transaction.status = "rejected";
     transaction.rejectedBy = req.user._id;
     transaction.rejectedAt = new Date();
-    transaction.adminComment = comment || "Rejected by admin";
+    transaction.adminComment = comment || "Rejected";
     await transaction.save();
 
     await transaction.populate("category submittedBy rejectedBy");
@@ -824,13 +981,29 @@ exports.simpleRejectTransaction = async (req, res) => {
       console.error("Notification error:", notifError);
     }
 
+    // Send admin report to CEO if action was performed by admin
+    if (req.user.role === "admin") {
+      try {
+        await reportService.sendAdminReportToCEO(req.user._id);
+        console.log("Admin report sent to CEO after rejection");
+      } catch (reportError) {
+        console.error("Report error:", reportError);
+      }
+    }
+
     res.status(200).json({
       success: true,
       message: "Transaction rejected successfully",
       data: transaction,
     });
   } catch (error) {
-    res.status(500).json({ success: false, message: error.message });
+    console.error("Transaction rejection error:", error);
+    res.status(500).json({
+      success: false,
+      message:
+        error.message || "Failed to reject transaction. Please try again.",
+      error: process.env.NODE_ENV === "development" ? error.stack : undefined,
+    });
   }
 };
 
@@ -914,6 +1087,37 @@ exports.requestAdditionalInfo = async (req, res) => {
       message: "Information request sent to custodian",
       data: transaction,
     });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Send admin transaction report to CEO
+// @route   POST /api/transactions/send-ceo-report
+// @access  Private (Admin only)
+exports.sendCEOReport = async (req, res) => {
+  try {
+    if (req.user.role !== "admin") {
+      return res.status(403).json({
+        success: false,
+        message: "Only admins can send CEO reports",
+      });
+    }
+
+    const result = await reportService.sendAdminReportToCEO(req.user._id);
+
+    if (result.success) {
+      res.status(200).json({
+        success: true,
+        message: result.message,
+        transactionCount: result.transactionCount,
+      });
+    } else {
+      res.status(400).json({
+        success: false,
+        message: result.message || result.error,
+      });
+    }
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

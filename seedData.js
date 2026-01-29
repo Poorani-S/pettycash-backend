@@ -28,7 +28,7 @@ const seedData = async () => {
     // Create users
     const admin = await User.create({
       name: "Admin User",
-      email: "admin@pettycash.com",
+      email: "poorani372006@gmail.com",
       password: "admin123",
       role: "admin",
       department: "Administration",
@@ -37,25 +37,16 @@ const seedData = async () => {
 
     const manager = await User.create({
       name: "John Manager",
-      email: "manager@pettycash.com",
+      email: "poorani6380045604@gmail.com",
       password: "manager123",
       role: "manager",
       department: "IT",
       phone: "+1234567892",
     });
 
-    const pooraniManager = await User.create({
-      name: "Poorani Manager",
-      email: "poorani6380045604@gmail.com",
-      password: "poorani123",
-      role: "manager",
-      department: "Operations",
-      phone: "+916380045604",
-    });
-
     const employee = await User.create({
       name: "Jane Employee",
-      email: "employee@pettycash.com",
+      email: "241cd030@srcw.ac.in",
       password: "employee123",
       role: "employee",
       department: "IT",
@@ -148,16 +139,13 @@ const seedData = async () => {
     console.log("=================================\n");
     console.log("Test Credentials:");
     console.log("\n1. Admin:");
-    console.log("   Email: admin@pettycash.com");
+    console.log("   Email: poorani372006@gmail.com");
     console.log("   Password: admin123");
     console.log("\n2. Manager:");
-    console.log("   Email: manager@pettycash.com");
-    console.log("   Password: manager123");
-    console.log("\n3. Poorani Manager:");
     console.log("   Email: poorani6380045604@gmail.com");
-    console.log("   Password: poorani123");
-    console.log("\n4. Employee:");
-    console.log("   Email: employee@pettycash.com");
+    console.log("   Password: manager123");
+    console.log("\n3. Employee:");
+    console.log("   Email: 241cd030@srcw.ac.in");
     console.log("   Password: employee123");
     console.log("\n=================================\n");
 

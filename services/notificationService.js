@@ -1,37 +1,5 @@
-const nodemailer = require("nodemailer");
+const { sendEmail } = require("./emailService");
 const User = require("../models/User");
-
-// Email configuration (reuse from OTP service)
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || "smtp.gmail.com",
-  port: process.env.EMAIL_PORT || 587,
-  secure: false,
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
-  },
-});
-
-/**
- * Send email notification
- */
-const sendEmail = async (to, subject, htmlContent) => {
-  try {
-    const mailOptions = {
-      from: process.env.EMAIL_FROM || "Pettica$h <noreply@petticash.com>",
-      to,
-      subject,
-      html: htmlContent,
-    };
-
-    await transporter.sendMail(mailOptions);
-    console.log(`Email sent to: ${to}`);
-    return { success: true };
-  } catch (error) {
-    console.error("Email send error:", error);
-    return { success: false, error: error.message };
-  }
-};
 
 /**
  * Notify approver about new expense submission
@@ -392,14 +360,14 @@ const notifyAdminFailedLogin = async (user) => {
   try {
     // Find all admins
     const admins = await User.find({ role: "admin", isActive: true });
-    
+
     if (admins.length === 0) {
       console.warn("No active admins found to notify");
       return { success: false, error: "No admins found" };
     }
 
     const subject = `🚨 Security Alert: Multiple Failed Login Attempts - ${user.name}`;
-    
+
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -494,31 +462,31 @@ const notifyAdminFailedLogin = async (user) => {
 const sendTransactionHistoryToAdmin = async (transactions, period) => {
   try {
     const admins = await User.find({ role: "admin", isActive: true });
-    
+
     if (admins.length === 0) {
       return { success: false, error: "No admins found" };
     }
 
     const subject = `📊 Transaction History Report - ${period}`;
-    
+
     let transactionRows = "";
     let totalAmount = 0;
-    
+
     transactions.forEach((t, index) => {
       totalAmount += t.postTaxAmount || t.amount || 0;
       transactionRows += `
-        <tr style="background: ${index % 2 === 0 ? '#f9fafb' : 'white'};">
-          <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${t.transactionNumber || 'N/A'}</td>
+        <tr style="background: ${index % 2 === 0 ? "#f9fafb" : "white"};">
+          <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${t.transactionNumber || "N/A"}</td>
           <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${new Date(t.transactionDate || t.createdAt).toLocaleDateString()}</td>
-          <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${t.payeeClientName || 'N/A'}</td>
-          <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${t.category?.name || 'N/A'}</td>
+          <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${t.payeeClientName || "N/A"}</td>
+          <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${t.category?.name || "N/A"}</td>
           <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">₹${(t.postTaxAmount || t.amount || 0).toLocaleString()}</td>
           <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">
-            <span style="padding: 4px 8px; border-radius: 4px; font-size: 12px; background: ${t.status === 'approved' ? '#d1fae5' : t.status === 'pending' ? '#fef3c7' : '#fee2e2'}; color: ${t.status === 'approved' ? '#065f46' : t.status === 'pending' ? '#92400e' : '#991b1b'};">
-              ${(t.status || 'pending').toUpperCase()}
+            <span style="padding: 4px 8px; border-radius: 4px; font-size: 12px; background: ${t.status === "approved" ? "#d1fae5" : t.status === "pending" ? "#fef3c7" : "#fee2e2"}; color: ${t.status === "approved" ? "#065f46" : t.status === "pending" ? "#92400e" : "#991b1b"};">
+              ${(t.status || "pending").toUpperCase()}
             </span>
           </td>
-          <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${t.submittedBy?.name || 'N/A'}</td>
+          <td style="padding: 10px; border-bottom: 1px solid #e5e7eb;">${t.submittedBy?.name || "N/A"}</td>
         </tr>
       `;
     });
