@@ -30,62 +30,154 @@ const generatePDFReport = async (transactions, adminUser) => {
       doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", reject);
 
-      // Header with Logo placeholder and Company Info
-      doc
-        .fontSize(24)
-        .fillColor("#023e8a")
-        .text("KAMBAA", 50, 50, { align: "center" })
-        .fontSize(10)
-        .fillColor("#666")
-        .text("Petty Cash Management System", { align: "center" })
-        .moveDown();
+      // Add logo beside company name
+      const logoPath =
+        "C:\\Users\\Admin\\OneDrive\\Desktop\\Project\\Petty Cash - SOW\\petty-cash-app\\backend\\kambaa-logo.png";
+      const startY = 50;
+
+      console.log("🔍 Logo Debug Info:");
+      console.log("  Path:", logoPath);
+      console.log("  Exists:", fs.existsSync(logoPath));
+
+      try {
+        if (fs.existsSync(logoPath)) {
+          console.log("✅ Loading logo into PDF...");
+          // Add logo on the left side with larger size
+          doc.image(logoPath, 50, startY, { width: 80, height: 80 });
+
+          // Company name and title beside logo
+          doc
+            .fontSize(24)
+            .fillColor("#023e8a")
+            .text("Kambaa Inc.", 145, startY + 10, { align: "left" })
+            .fontSize(10)
+            .fillColor("#666")
+            .text("Petty Cash Management System", 145, startY + 45, {
+              align: "left",
+            });
+          console.log("✅ Logo loaded successfully into PDF");
+        } else {
+          console.log(`⚠️ Logo not found at: ${logoPath}`);
+          // Fallback to centered text without logo
+          doc
+            .fontSize(24)
+            .fillColor("#023e8a")
+            .text("Kambaa Inc.", 50, startY, { align: "center" })
+            .fontSize(10)
+            .fillColor("#666")
+            .text("Petty Cash Management System", { align: "center" });
+        }
+      } catch (logoError) {
+        console.error("❌ Logo error:", logoError.message);
+        console.error("❌ Full error:", logoError);
+        // Fallback to centered text without logo
+        doc
+          .fontSize(24)
+          .fillColor("#023e8a")
+          .text("Kambaa Inc.", 50, startY, { align: "center" })
+          .fontSize(10)
+          .fillColor("#666")
+          .text("Petty Cash Management System", { align: "center" });
+      }
+
+      doc.moveDown(3);
 
       // Title
       doc
         .fontSize(18)
         .fillColor("#023e8a")
-        .text("Admin Transaction History Report", { align: "center" })
+        .text("PETTY CASH EXPENSE REPORT", { align: "center" })
         .moveDown(0.5);
 
       // Report Info
+      const reportInfoY = doc.y + 10;
+      const boxHeight = 50;
+      const boxWidth = 495;
+
+      // Draw info box with border
+      doc
+        .rect(50, reportInfoY, boxWidth, boxHeight)
+        .lineWidth(2)
+        .strokeColor("#0077b6")
+        .stroke();
+
+      // Left side - Report Period and Date
       doc
         .fontSize(10)
-        .fillColor("#333")
-        .text(`Generated: ${new Date().toLocaleString()}`, { align: "center" })
-        .text(`Admin: ${adminUser.name} (${adminUser.email})`, {
-          align: "center",
+        .fillColor("#0077b6")
+        .text("Report Period: month - Present", 60, reportInfoY + 10, {
+          width: 240,
         })
-        .moveDown(2);
+        .fillColor("#333")
+        .text(
+          `Generated On: ${new Date().toLocaleDateString("en-US", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
+          })}`,
+          60,
+          reportInfoY + 25,
+          { width: 240 },
+        );
 
-      // Summary Section
+      // Right side - Transaction stats
+      const totalTransactions = transactions.length;
       const totalAmount = transactions.reduce(
         (sum, t) => sum + (t.postTaxAmount || t.amount || 0),
-        0
+        0,
       );
+
+      doc
+        .fillColor("#0077b6")
+        .text(
+          `Total Transactions: ${totalTransactions}`,
+          310,
+          reportInfoY + 10,
+          { width: 230 },
+        )
+        .fillColor("#333")
+        .text(
+          `Total Amount: Rs.${totalAmount.toLocaleString("en-IN")}`,
+          310,
+          reportInfoY + 25,
+          { width: 230 },
+        );
+
+      doc.moveDown(4);
+
+      // Summary Section
       const approvedCount = transactions.filter(
-        (t) => t.status === "approved"
+        (t) => t.status === "approved",
       ).length;
       const pendingCount = transactions.filter(
-        (t) => t.status === "pending" || t.status === "pending_manager"
+        (t) => t.status === "pending" || t.status === "pending_manager",
       ).length;
       const rejectedCount = transactions.filter(
-        (t) => t.status === "rejected"
+        (t) => t.status === "rejected",
       ).length;
 
       doc
         .fontSize(12)
         .fillColor("#023e8a")
-        .text("Summary", { underline: true })
+        .text("SUMMARY", { underline: true })
         .moveDown(0.5);
 
       doc
         .fontSize(10)
         .fillColor("#333")
-        .text(`Total Transactions: ${transactions.length}`)
-        .text(`Total Amount: ₹${totalAmount.toLocaleString("en-IN")}`)
-        .text(`Approved: ${approvedCount}`)
-        .text(`Pending: ${pendingCount}`)
-        .text(`Rejected: ${rejectedCount}`)
+        .text(
+          `Paid (Approved): ${approvedCount} transactions - Rs.${transactions
+            .filter((t) => t.status === "approved")
+            .reduce((sum, t) => sum + (t.postTaxAmount || t.amount || 0), 0)
+            .toLocaleString("en-IN")}`,
+          { indent: 20 },
+        )
+        .moveDown(0.3)
+        .text(
+          `Pending/Rejected: ${pendingCount + rejectedCount} transactions`,
+          { indent: 20 },
+        )
         .moveDown(2);
 
       // Transactions Table Header
@@ -100,7 +192,7 @@ const generatePDFReport = async (transactions, adminUser) => {
       const itemHeight = 20;
       let currentY = tableTop;
 
-      // Headers
+      // Headers with better column names matching screenshot
       doc
         .fontSize(9)
         .fillColor("#fff")
@@ -109,11 +201,13 @@ const generatePDFReport = async (transactions, adminUser) => {
 
       doc
         .fillColor("#fff")
-        .text("Date", 55, currentY + 5, { width: 70 })
-        .text("Payee", 125, currentY + 5, { width: 100 })
-        .text("Purpose", 225, currentY + 5, { width: 120 })
-        .text("Amount", 345, currentY + 5, { width: 70, align: "right" })
-        .text("Status", 415, currentY + 5, { width: 125 });
+        .text("Date", 55, currentY + 5, { width: 65 })
+        .text("User", 120, currentY + 5, { width: 90 })
+        .text("Amount", 210, currentY + 5, { width: 70 })
+        .text("Reason", 280, currentY + 5, { width: 100 })
+        .text("Status", 380, currentY + 5, { width: 70 })
+        .text("Paid", 450, currentY + 5, { width: 40 })
+        .text("Payment Mode", 490, currentY + 5, { width: 50 });
 
       currentY += itemHeight;
 
@@ -127,51 +221,94 @@ const generatePDFReport = async (transactions, adminUser) => {
         const bgColor = index % 2 === 0 ? "#f9f9f9" : "#ffffff";
         doc.rect(50, currentY, 495, itemHeight).fill(bgColor);
 
+        // Format date as shown in screenshot (27/1/2026)
+        const transDate = new Date(transaction.transactionDate);
+        const formattedDate = `${transDate.getDate()}/${transDate.getMonth() + 1}/${transDate.getFullYear()}`;
+
+        // Determine status color
+        const statusColor =
+          transaction.status === "approved"
+            ? "#28a745"
+            : transaction.status === "pending" ||
+                transaction.status === "pending_manager"
+              ? "#ffc107"
+              : "#dc3545";
+
         doc
           .fontSize(8)
           .fillColor("#333")
+          .text(formattedDate, 55, currentY + 5, { width: 65 })
           .text(
-            new Date(transaction.transactionDate).toLocaleDateString("en-IN"),
-            55,
+            transaction.requestedBy?.name?.substring(0, 15) ||
+              transaction.payeeClientName?.substring(0, 15) ||
+              "N/A",
+            120,
             currentY + 5,
-            { width: 70 }
+            { width: 90 },
           )
           .text(
-            transaction.payeeClientName?.substring(0, 15) || "N/A",
-            125,
+            `Rs.${(transaction.postTaxAmount || transaction.amount || 0).toLocaleString("en-IN")}`,
+            210,
             currentY + 5,
-            { width: 100 }
+            { width: 70 },
           )
           .text(
-            transaction.purpose?.substring(0, 20) || "N/A",
-            225,
+            transaction.purpose?.substring(0, 18) || "N/A",
+            280,
             currentY + 5,
-            { width: 120 }
+            { width: 100 },
           )
+          .fillColor(statusColor)
           .text(
-            `₹${(transaction.postTaxAmount || transaction.amount || 0).toLocaleString("en-IN")}`,
-            345,
+            transaction.status === "approved"
+              ? "Paid"
+              : transaction.status?.charAt(0).toUpperCase() +
+                  transaction.status?.slice(1) || "Pending",
+            380,
             currentY + 5,
-            { width: 70, align: "right" }
+            { width: 70 },
           )
-          .text(transaction.status?.toUpperCase() || "N/A", 415, currentY + 5, {
-            width: 125,
-          });
+          .fillColor(transaction.status === "approved" ? "#dc3545" : "#28a745")
+          .text(
+            transaction.status === "approved" ? "No" : "Yes",
+            450,
+            currentY + 5,
+            { width: 40 },
+          )
+          .fillColor("#333")
+          .text(
+            transaction.paymentMethod?.toUpperCase() || "CASH",
+            490,
+            currentY + 5,
+            {
+              width: 50,
+            },
+          );
 
         currentY += itemHeight;
       });
 
-      // Footer
+      // Footer - matching screenshot format
+      const footerY = 750;
       doc
-        .moveDown(3)
         .fontSize(8)
         .fillColor("#666")
         .text(
-          "This is an automated report generated by Kambaa Petty Cash Management System",
+          "This is a system-generated report from Kambaa Petty Cash Management System",
           50,
-          750,
-          { align: "center", width: 495 }
-        );
+          footerY,
+          { align: "center", width: 495 },
+        )
+        .text(
+          `Generated by: ${adminUser.name} | Date: ${new Date().toLocaleDateString("en-IN", { day: "2-digit", month: "2-digit", year: "numeric" })}, ${new Date().toLocaleTimeString("en-IN", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}`,
+          50,
+          footerY + 12,
+          { align: "center", width: 495 },
+        )
+        .text("Confidential - For Internal Use Only", 50, footerY + 24, {
+          align: "center",
+          width: 495,
+        });
 
       doc.end();
     } catch (error) {
@@ -224,7 +361,9 @@ const generateExcelReport = async (transactions, adminUser) => {
         purpose: transaction.purpose || "N/A",
         category: transaction.category?.name || "N/A",
         amount: transaction.amount || 0,
-        tax: (transaction.postTaxAmount || transaction.amount || 0) - (transaction.amount || 0),
+        tax:
+          (transaction.postTaxAmount || transaction.amount || 0) -
+          (transaction.amount || 0),
         totalAmount: transaction.postTaxAmount || transaction.amount || 0,
         paymentMethod: transaction.paymentMethod || "N/A",
         status: transaction.status?.toUpperCase() || "N/A",
@@ -238,7 +377,7 @@ const generateExcelReport = async (transactions, adminUser) => {
       transactionNumber: "SUMMARY",
       totalAmount: transactions.reduce(
         (sum, t) => sum + (t.postTaxAmount || t.amount || 0),
-        0
+        0,
       ),
     });
     summaryRow.font = { bold: true };
@@ -332,7 +471,10 @@ const sendAdminReportToCEO = async (adminUserId) => {
               </div>
               <div class="stat">
                 <span class="stat-label">Total Amount:</span> ₹${transactions
-                  .reduce((sum, t) => sum + (t.postTaxAmount || t.amount || 0), 0)
+                  .reduce(
+                    (sum, t) => sum + (t.postTaxAmount || t.amount || 0),
+                    0,
+                  )
                   .toLocaleString("en-IN")}
               </div>
               <div class="stat">
@@ -344,7 +486,7 @@ const sendAdminReportToCEO = async (adminUserId) => {
                 <span class="stat-label">Pending:</span> ${
                   transactions.filter(
                     (t) =>
-                      t.status === "pending" || t.status === "pending_manager"
+                      t.status === "pending" || t.status === "pending_manager",
                   ).length
                 }
               </div>
