@@ -156,7 +156,7 @@ const Reports = () => {
       console.log("Fetched users for dropdown:", activeUsers.length);
     } catch (err) {
       console.error("Error fetching users:", err);
-      toast.error("Failed to load users. Please try again.");
+      // Silently fail - users dropdown will remain empty
       setUsers([]);
     } finally {
       if (showLoader) setUsersLoading(false);
@@ -606,7 +606,6 @@ const Reports = () => {
                       users.map((u) => (
                         <option key={u._id} value={u._id}>
                           {u.name} ({u.role || "N/A"})
-                          {u.email ? ` - ${u.email}` : ""}
                         </option>
                       ))
                     ) : !usersLoading && users.length === 0 ? (
