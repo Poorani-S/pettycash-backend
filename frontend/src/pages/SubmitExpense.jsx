@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useNavigate } from "react-router-dom";
 import axios from "../utils/axios";
+import { toast } from "react-toastify";
 
 const SubmitExpense = () => {
   const navigate = useNavigate();
@@ -101,6 +102,12 @@ const SubmitExpense = () => {
       });
 
       setSuccess("Expense submitted successfully!");
+      // Dispatch event to notify other components (Reports page) about the new transaction
+      window.dispatchEvent(
+        new CustomEvent("transactionsUpdated", {
+          detail: { action: "created" },
+        }),
+      );
       setTimeout(() => {
         navigate("/transactions");
       }, 2000);

@@ -6,10 +6,25 @@ import Layout from "../components/Layout";
 const Transactions = () => {
   const navigate = useNavigate();
   const [transactions, setTransactions] = useState([]);
+  const [fundTransfers, setFundTransfers] = useState([]);
   const [loading, setLoading] = useState(true);
   const [filter, setFilter] = useState("all"); // all, pending, approved, rejected
   const [user, setUser] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  const [summary, setSummary] = useState({
+    expense: {
+      totalTransactions: 0,
+      totalAmount: 0,
+      pendingCount: 0,
+      approvedCount: 0,
+      rejectedCount: 0,
+    },
+    fundTransfers: {
+      overall: { total: 0, count: 0 },
+      bank: { totalAmount: 0, count: 0 },
+      cash: { totalAmount: 0, count: 0 },
+    },
+  });
 
   useEffect(() => {
     const userData = localStorage.getItem("user");
@@ -17,16 +32,63 @@ const Transactions = () => {
       setUser(JSON.parse(userData));
     }
     fetchTransactions();
+    fetchFinancialSummary();
+
+    // Listen for transaction updates from other pages
+    const handleTransactionUpdate = () => {
+      fetchTransactions();
+      fetchFinancialSummary();
+    };
+
+    window.addEventListener("transactionsUpdated", handleTransactionUpdate);
+
+    return () => {
+      window.removeEventListener(
+        "transactionsUpdated",
+        handleTransactionUpdate,
+      );
+    };
   }, [filter]);
+
+  const fetchFinancialSummary = async () => {
+    try {
+      const response = await axios.get("/reports/financial-summary");
+      const data = response.data.data;
+      const expense = data?.expenseTransactions?.summary || {};
+      const byType = data?.fundTransfers?.byType || {};
+
+      setSummary({
+        expense: {
+          totalTransactions: expense.totalTransactions || 0,
+          totalAmount: expense.totalAmount || 0,
+          pendingCount: expense.pendingCount || 0,
+          approvedCount: expense.approvedCount || 0,
+          rejectedCount: expense.rejectedCount || 0,
+        },
+        fundTransfers: {
+          overall: data?.fundTransfers?.overall || { total: 0, count: 0 },
+          bank: byType.bank || { totalAmount: 0, count: 0 },
+          cash: byType.cash || { totalAmount: 0, count: 0 },
+        },
+      });
+
+      // Also fetch fund transfers list so the page has meaningful data even if there are no expense transactions
+      const ftRes = await axios.get("/fund-transfers?limit=50");
+      setFundTransfers(ftRes.data.data || []);
+    } catch (err) {
+      console.error("Error fetching financial summary:", err);
+    }
+  };
 
   const fetchTransactions = async () => {
     try {
       setLoading(true);
       const params = filter !== "all" ? { status: filter } : {};
       const response = await axios.get("/transactions", { params });
-      setTransactions(response.data.data);
+      setTransactions(response.data?.data || []);
     } catch (err) {
       console.error("Error fetching transactions:", err);
+      setTransactions([]);
     } finally {
       setLoading(false);
     }
@@ -39,7 +101,14 @@ const Transactions = () => {
 
     try {
       await axios.patch(`/transactions/${id}/approve`);
-      fetchTransactions();
+      await fetchTransactions();
+      await fetchFinancialSummary();
+      // Dispatch event to notify other components (Reports page) about the update
+      window.dispatchEvent(
+        new CustomEvent("transactionsUpdated", {
+          detail: { action: "approved" },
+        }),
+      );
     } catch (err) {
       alert(err.response?.data?.message || "Failed to approve transaction");
     }
@@ -51,7 +120,14 @@ const Transactions = () => {
 
     try {
       await axios.patch(`/transactions/${id}/reject`, { comment });
-      fetchTransactions();
+      await fetchTransactions();
+      await fetchFinancialSummary();
+      // Dispatch event to notify other components (Reports page) about the update
+      window.dispatchEvent(
+        new CustomEvent("transactionsUpdated", {
+          detail: { action: "rejected" },
+        }),
+      );
     } catch (err) {
       alert(err.response?.data?.message || "Failed to reject transaction");
     }
@@ -60,18 +136,36 @@ const Transactions = () => {
   const getStatusBadge = (status) => {
     const badges = {
       pending: "bg-yellow-100 text-yellow-700",
+      pending_approval: "bg-yellow-100 text-yellow-700",
+      info_requested: "bg-yellow-100 text-yellow-700",
       approved: "bg-green-100 text-green-700",
+      paid: "bg-green-100 text-green-700",
       rejected: "bg-red-100 text-red-700",
+      draft: "bg-gray-100 text-gray-700",
     };
     return badges[status] || "bg-gray-100 text-gray-700";
   };
 
+  const isPendingLike = (status) =>
+    ["pending", "pending_approval", "info_requested"].includes(status);
+
   const formatDate = (dateString) => {
-    return new Date(dateString).toLocaleDateString("en-IN", {
+    if (!dateString) return "—";
+    const date = new Date(dateString);
+    if (Number.isNaN(date.getTime())) return "—";
+
+    return date.toLocaleDateString("en-IN", {
       year: "numeric",
       month: "short",
       day: "numeric",
     });
+  };
+
+  const formatAmount = (value) => {
+    const numberValue =
+      typeof value === "number" ? value : value ? Number(value) : 0;
+    if (!Number.isFinite(numberValue)) return "0";
+    return numberValue.toLocaleString("en-IN");
   };
 
   const filteredTransactions = transactions.filter(
@@ -86,14 +180,14 @@ const Transactions = () => {
   );
 
   const stats = {
-    total: transactions.length,
-    pending: transactions.filter((t) => t.status === "pending").length,
-    approved: transactions.filter((t) => t.status === "approved").length,
-    rejected: transactions.filter((t) => t.status === "rejected").length,
-    totalAmount: transactions.reduce(
-      (sum, t) => sum + (t.postTaxAmount || 0),
-      0,
-    ),
+    total:
+      summary.expense.totalTransactions + summary.fundTransfers.overall.count,
+    pending: summary.expense.pendingCount,
+    approved:
+      summary.expense.approvedCount + summary.fundTransfers.overall.count,
+    rejected: summary.expense.rejectedCount,
+    totalAmount:
+      summary.expense.totalAmount + summary.fundTransfers.overall.total,
   };
 
   return (
@@ -475,7 +569,7 @@ const Transactions = () => {
                           />
                         </svg>
                       )}
-                      {transaction.status.toUpperCase()}
+                      {(transaction.status || "pending").toUpperCase()}
                     </span>
                     {transaction.hasGSTInvoice && (
                       <span className="px-4 py-2 rounded-xl text-sm font-bold bg-blue-100 text-blue-700 flex items-center gap-2">
@@ -530,7 +624,11 @@ const Transactions = () => {
                           d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"
                         />
                       </svg>
-                      {formatDate(transaction.paymentDate)}
+                      {formatDate(
+                        transaction.paymentDate ||
+                          transaction.transactionDate ||
+                          transaction.createdAt,
+                      )}
                     </span>
                     <span className="flex items-center gap-2">
                       <svg
@@ -546,17 +644,22 @@ const Transactions = () => {
                           d="M3 10h18M7 15h1m4 0h1m-7 4h12a3 3 0 003-3V8a3 3 0 00-3-3H6a3 3 0 00-3 3v8a3 3 0 003 3z"
                         />
                       </svg>
-                      {transaction.paymentMode}
+                      {transaction.paymentMode ||
+                        transaction.paymentMethod ||
+                        "N/A"}
                     </span>
                   </div>
                 </div>
                 <div className="text-right lg:text-right">
                   <p className="text-3xl font-bold text-[#023e8a]">
-                    ₹{transaction.postTaxAmount.toLocaleString("en-IN")}
+                    ₹
+                    {formatAmount(
+                      transaction.postTaxAmount ?? transaction.amount,
+                    )}
                   </p>
-                  {transaction.taxAmount > 0 && (
+                  {Number(transaction.taxAmount) > 0 && (
                     <p className="text-sm text-gray-500 mt-1">
-                      Tax: ₹{transaction.taxAmount.toLocaleString("en-IN")}
+                      Tax: ₹{formatAmount(transaction.taxAmount)}
                     </p>
                   )}
                 </div>
@@ -587,7 +690,7 @@ const Transactions = () => {
 
                 <div className="flex items-center gap-3">
                   {user?.role === "admin" &&
-                    transaction.status === "pending" && (
+                    isPendingLike(transaction.status) && (
                       <>
                         <button
                           onClick={() => handleReject(transaction._id)}

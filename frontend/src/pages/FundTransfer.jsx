@@ -308,6 +308,13 @@ const FundTransfer = () => {
       );
       setCurrentBalance(response.data.balance);
 
+      // Dispatch event to notify other components about the update
+      window.dispatchEvent(
+        new CustomEvent("transactionsUpdated", {
+          detail: { action: "fundTransferCreated" },
+        }),
+      );
+
       // Reset form - keep bank name pre-filled from user profile
       setAmount("");
       setAccountNumber("");

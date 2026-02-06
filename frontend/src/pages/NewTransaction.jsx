@@ -306,6 +306,13 @@ const NewTransaction = () => {
         "Transaction submitted successfully! Waiting for admin approval.",
       );
 
+      // Dispatch event to notify other components (Reports page) about the new transaction
+      window.dispatchEvent(
+        new CustomEvent("transactionsUpdated", {
+          detail: { action: "created" },
+        }),
+      );
+
       // Reset form after 2 seconds
       setTimeout(() => {
         navigate("/transactions");

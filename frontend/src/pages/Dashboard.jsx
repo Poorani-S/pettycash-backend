@@ -26,36 +26,87 @@ function Dashboard() {
 
     setUser(JSON.parse(userData));
     fetchDashboardData();
+
+    // Listen for transaction updates from other pages
+    const handleTransactionUpdate = () => {
+      fetchDashboardData();
+    };
+
+    window.addEventListener("transactionsUpdated", handleTransactionUpdate);
+
+    return () => {
+      window.removeEventListener(
+        "transactionsUpdated",
+        handleTransactionUpdate,
+      );
+    };
   }, [navigate]);
 
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
-      const [transactionsRes, balanceRes] = await Promise.all([
-        axios.get("/transactions?limit=5"),
-        axios
-          .get("/fund-transfers/balance/current")
-          .catch(() => ({ data: { data: { currentBalance: 0 } } })),
-      ]);
+      const [financialRes, balanceRes, transactionsRes, fundTransfersRes] =
+        await Promise.all([
+          axios.get("/reports/financial-summary").catch(() => ({ data: {} })),
+          axios
+            .get("/fund-transfers/balance/current")
+            .catch(() => ({ data: { data: { currentBalance: 0 } } })),
+          axios
+            .get("/transactions?limit=10")
+            .catch(() => ({ data: { data: [] } })),
+          axios
+            .get("/fund-transfers?limit=10")
+            .catch(() => ({ data: { data: [] } })),
+        ]);
 
-      setRecentTransactions(transactionsRes.data.data || []);
+      const financial = financialRes.data?.data;
+      const expenseSummary = financial?.expenseTransactions?.summary || {};
+      const fundOverall = financial?.fundTransfers?.overall || {};
 
-      const transactions = transactionsRes.data.data || [];
-      const pending = transactions.filter((t) => t.status === "pending").length;
-      const approved = transactions.filter(
-        (t) => t.status === "approved",
-      ).length;
-      const total = transactions.reduce(
-        (sum, t) => sum + (t.postTaxAmount || t.amount || 0),
-        0,
-      );
+      // Get transactions and fund transfers
+      const transactions = transactionsRes.data?.data || [];
+      const fundTransfers = fundTransfersRes.data?.data || [];
+
+      const combinedTotal =
+        (expenseSummary.totalAmount || 0) + (fundOverall.total || 0);
+
+      const pendingCount = expenseSummary.pendingCount || 0;
+      const approvedCount =
+        (expenseSummary.approvedCount || 0) + (fundOverall.count || 0);
 
       setStats({
-        totalExpenses: total,
-        pendingCount: pending,
-        approvedCount: approved,
+        totalExpenses: combinedTotal,
+        pendingCount,
+        approvedCount,
         currentBalance: balanceRes.data.data?.currentBalance || 0,
       });
+
+      // Combine and sort recent transactions
+      const normalizedTransactions = transactions.map((tx) => ({
+        ...tx,
+        kind: "transaction",
+        displayDate: tx.transactionDate,
+        displayAmount: tx.postTaxAmount || tx.amount,
+      }));
+
+      const normalizedFundTransfers = fundTransfers.map((ft) => ({
+        _id: ft._id,
+        kind: "fund_transfer",
+        status: "approved",
+        description: ft.purpose || ft.notes || "Fund Transfer",
+        category: { name: ft.purpose || "Fund Transfer" },
+        displayDate: ft.transferDate,
+        displayAmount: ft.amount,
+        amount: ft.amount,
+        transferType: ft.transferType,
+      }));
+
+      // Combine and sort by date
+      const combined = [...normalizedTransactions, ...normalizedFundTransfers]
+        .sort((a, b) => new Date(b.displayDate) - new Date(a.displayDate))
+        .slice(0, 5);
+
+      setRecentTransactions(combined);
     } catch (err) {
       console.error("Error fetching dashboard data:", err);
     } finally {
@@ -300,11 +351,15 @@ function Dashboard() {
                 <div className="flex items-center gap-3 sm:gap-4 flex-1">
                   <div
                     className={`rounded-xl p-2 sm:p-3 ${
-                      transaction.status === "approved"
-                        ? "bg-green-100 text-green-600"
-                        : transaction.status === "pending"
-                          ? "bg-yellow-100 text-yellow-600"
-                          : "bg-red-100 text-red-600"
+                      transaction.kind === "fund_transfer"
+                        ? transaction.transferType === "bank"
+                          ? "bg-green-100 text-green-600"
+                          : "bg-yellow-100 text-yellow-600"
+                        : transaction.status === "approved"
+                          ? "bg-green-100 text-green-600"
+                          : transaction.status === "pending"
+                            ? "bg-yellow-100 text-yellow-600"
+                            : "bg-red-100 text-red-600"
                     }`}
                   >
                     <svg
@@ -326,17 +381,18 @@ function Dashboard() {
                       {transaction.description || "Expense"}
                     </p>
                     <p className="text-xs sm:text-sm text-gray-600">
-                      {transaction.category?.name || "General"}
+                      {transaction.kind === "fund_transfer"
+                        ? `Fund Transfer (${transaction.transferType || ""})`
+                        : transaction.category?.name || "General"}
                     </p>
                     <p className="text-xs text-gray-500 mt-1">
-                      {new Date(transaction.transactionDate).toLocaleDateString(
-                        "en-US",
-                        {
-                          year: "numeric",
-                          month: "short",
-                          day: "numeric",
-                        },
-                      )}
+                      {new Date(
+                        transaction.displayDate || transaction.transactionDate,
+                      ).toLocaleDateString("en-US", {
+                        year: "numeric",
+                        month: "short",
+                        day: "numeric",
+                      })}
                     </p>
                   </div>
                 </div>
@@ -344,6 +400,7 @@ function Dashboard() {
                   <p className="text-lg sm:text-xl font-bold text-gray-800">
                     ₹
                     {(
+                      transaction.displayAmount ||
                       transaction.postTaxAmount ||
                       transaction.amount ||
                       0
@@ -351,14 +408,20 @@ function Dashboard() {
                   </p>
                   <span
                     className={`inline-block px-2 sm:px-3 py-1 rounded-full text-xs font-bold ${
-                      transaction.status === "approved"
-                        ? "bg-green-100 text-green-700"
-                        : transaction.status === "pending"
-                          ? "bg-yellow-100 text-yellow-700"
-                          : "bg-red-100 text-red-700"
+                      transaction.kind === "fund_transfer"
+                        ? transaction.transferType === "bank"
+                          ? "bg-green-100 text-green-700"
+                          : "bg-yellow-100 text-yellow-700"
+                        : transaction.status === "approved"
+                          ? "bg-green-100 text-green-700"
+                          : transaction.status === "pending"
+                            ? "bg-yellow-100 text-yellow-700"
+                            : "bg-red-100 text-red-700"
                     }`}
                   >
-                    {transaction.status?.toUpperCase() || "PENDING"}
+                    {transaction.kind === "fund_transfer"
+                      ? (transaction.transferType || "transfer").toUpperCase()
+                      : transaction.status?.toUpperCase() || "PENDING"}
                   </span>
                 </div>
               </div>

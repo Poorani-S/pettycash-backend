@@ -14,7 +14,7 @@ const { protect, authorize } = require("../middleware/authMiddleware");
 // All routes require authentication
 router.use(protect);
 
-// Balance route - accessible to admin, manager, and handler
+// Balance route - accessible to all authenticated users
 router.get("/balance/current", getCurrentBalance);
 
 // Admin and Manager routes

@@ -364,7 +364,7 @@ exports.register = async (req, res) => {
       name,
       email,
       phone,
-      role: role || "handler",
+      role: role || "employee",
       department,
       otpEnabled: true,
       createdBy: req.user ? req.user._id : null,

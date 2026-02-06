@@ -170,7 +170,7 @@ function UserManagement() {
         email: "",
         phone: "",
         password: "",
-        role: "custodian",
+        role: "employee",
         department: "",
         employeeNumber: "",
         approvalLimit: "",
@@ -301,7 +301,7 @@ function UserManagement() {
       email: "",
       phone: "",
       password: "",
-      role: "custodian",
+      role: "employee",
       department: "",
       employeeNumber: "",
       approvalLimit: "",
@@ -323,7 +323,7 @@ function UserManagement() {
       manager: "bg-indigo-100 text-indigo-800 border-indigo-200",
       employee: "bg-cyan-100 text-cyan-800 border-cyan-200",
       intern: "bg-pink-100 text-pink-800 border-pink-200",
-      custodian: "bg-blue-100 text-blue-800 border-blue-200",
+
       approver: "bg-green-100 text-green-800 border-green-200",
       auditor: "bg-yellow-100 text-yellow-800 border-yellow-200",
     };
@@ -336,7 +336,7 @@ function UserManagement() {
       manager: "📋",
       employee: "👤",
       intern: "🎓",
-      custodian: "💼",
+
       approver: "✅",
       auditor: "👁️",
     };
@@ -1084,9 +1084,6 @@ function UserManagement() {
                       <option value="manager">
                         📋 Manager (Manage team & approve)
                       </option>
-                      <option value="custodian">
-                        💼 Custodian (Create expenses)
-                      </option>
                       <option value="approver">
                         ✅ Approver (Review & approve)
                       </option>
@@ -1346,7 +1343,7 @@ function UserManagement() {
                       email: "",
                       phone: "",
                       password: "",
-                      role: "custodian",
+                      role: "employee",
                       department: "",
                       employeeNumber: "",
                       approvalLimit: "",
