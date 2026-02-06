@@ -201,7 +201,7 @@ exports.getFundTransferById = async (req, res) => {
 
 // @desc    Get current balance
 // @route   GET /api/fund-transfers/balance/current
-// @access  Admin and Handler
+// @access  Authenticated users
 exports.getCurrentBalance = async (req, res) => {
   try {
     let balance = await Balance.findOne().populate("updatedBy", "name email");

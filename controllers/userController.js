@@ -59,10 +59,19 @@ exports.getUsers = async (req, res) => {
       .select("-password")
       .sort({ name: 1 });
 
+    // Map legacy custodian/handler roles to employee
+    const mappedUsers = users.map((user) => {
+      const userObj = user.toObject();
+      if (userObj.role === "custodian" || userObj.role === "handler") {
+        userObj.role = "employee";
+      }
+      return userObj;
+    });
+
     res.status(200).json({
       success: true,
-      count: users.length,
-      data: users,
+      count: mappedUsers.length,
+      data: mappedUsers,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
@@ -84,9 +93,15 @@ exports.getUser = async (req, res) => {
         .json({ success: false, message: "User not found" });
     }
 
+    // Map legacy custodian/handler roles to employee
+    const userObj = user.toObject();
+    if (userObj.role === "custodian" || userObj.role === "handler") {
+      userObj.role = "employee";
+    }
+
     res.status(200).json({
       success: true,
-      data: user,
+      data: userObj,
     });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });

@@ -45,15 +45,12 @@ exports.getTransactions = async (req, res) => {
 
     // Build query
     let query = {};
+    let roleFilter = null;
 
     // Role-based filtering - Follow hierarchy
-    if (
-      req.user.role === "employee" ||
-      req.user.role === "intern" ||
-      req.user.role === "handler"
-    ) {
-      // Employees, interns, and handlers can only see their own transactions
-      query.$or = [
+    if (req.user.role === "employee" || req.user.role === "intern") {
+      // Employees and interns can only see their own transactions
+      roleFilter = [
         { submittedBy: req.user._id },
         { requestedBy: req.user._id },
       ];
@@ -64,14 +61,14 @@ exports.getTransactions = async (req, res) => {
       const teamMembers = await User.find({ managerId: req.user._id }, "_id");
       const teamMemberIds = teamMembers.map((member) => member._id);
 
-      query.$or = [
+      roleFilter = [
         { submittedBy: req.user._id },
         { requestedBy: req.user._id },
         { submittedBy: { $in: teamMemberIds } },
         { requestedBy: { $in: teamMemberIds } },
       ];
     }
-    // Admin, custodian, and auditor can see all transactions
+    // Admin, employee, and auditor can see all transactions
 
     if (status) query.status = status;
     if (category) query.category = category;
@@ -82,14 +79,25 @@ exports.getTransactions = async (req, res) => {
       if (endDate) query.transactionDate.$lte = new Date(endDate);
     }
 
+    // Build search filter
+    let searchFilter = null;
     if (search) {
-      query.$or = [
+      searchFilter = [
         { title: { $regex: search, $options: "i" } },
         { description: { $regex: search, $options: "i" } },
         { transactionNumber: { $regex: search, $options: "i" } },
         { purpose: { $regex: search, $options: "i" } },
         { payeeClientName: { $regex: search, $options: "i" } },
       ];
+    }
+
+    // Combine role and search filters using $and if both exist
+    if (roleFilter && searchFilter) {
+      query.$and = [{ $or: roleFilter }, { $or: searchFilter }];
+    } else if (roleFilter) {
+      query.$or = roleFilter;
+    } else if (searchFilter) {
+      query.$or = searchFilter;
     }
 
     const transactions = await Transaction.find(query)
@@ -129,11 +137,7 @@ exports.getTransaction = async (req, res) => {
     }
 
     // Check access rights - employees and interns can only view their own transactions
-    if (
-      req.user.role === "employee" ||
-      req.user.role === "intern" ||
-      req.user.role === "handler"
-    ) {
+    if (req.user.role === "employee" || req.user.role === "intern") {
       const isOwner =
         transaction.submittedBy?._id.toString() === req.user._id.toString() ||
         transaction.requestedBy?._id.toString() === req.user._id.toString();
@@ -169,7 +173,7 @@ exports.getTransaction = async (req, res) => {
         }
       }
     }
-    // Admin, custodian, and auditor can view all transactions
+    // Admin, employee, and auditor can view all transactions
 
     res.status(200).json({
       success: true,
@@ -306,7 +310,7 @@ exports.createTransaction = async (req, res) => {
           });
         });
       } else {
-        // For other roles (custodian, auditor), use legacy approval flow
+        // For other roles (employee, auditor), use legacy approval flow
         const legacyApprovers = await User.find({
           role: { $in: ["approver", "admin"] },
           isActive: true,
@@ -855,7 +859,7 @@ exports.simpleApproveTransaction = async (req, res) => {
 
     await transaction.populate("category submittedBy approvedBy");
 
-    // Send notification to custodian
+    // Send notification to employee
     try {
       await notifyExpenseStatusUpdate(
         transaction,
@@ -968,7 +972,7 @@ exports.simpleRejectTransaction = async (req, res) => {
 
     await transaction.populate("category submittedBy rejectedBy");
 
-    // Send notification to custodian
+    // Send notification to employee
     try {
       await notifyExpenseStatusUpdate(
         transaction,
@@ -1060,7 +1064,7 @@ exports.requestAdditionalInfo = async (req, res) => {
 
     await transaction.save();
 
-    // Send notification to custodian
+    // Send notification to employee
     try {
       await notifyAdditionalInfoRequested(
         transaction,
@@ -1084,7 +1088,7 @@ exports.requestAdditionalInfo = async (req, res) => {
 
     res.status(200).json({
       success: true,
-      message: "Information request sent to custodian",
+      message: "Information request sent to employee",
       data: transaction,
     });
   } catch (error) {

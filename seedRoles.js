@@ -31,30 +31,30 @@ const seedDatabase = async () => {
     });
     console.log("✅ System Administrator created:", admin.email);
 
-    // 2. Create Petty-Cash Custodian/Accountant
+    // 2. Create Employee (Finance)
     const custodian1 = await User.create({
-      name: "Poorani - Custodian",
+      name: "Poorani - Employee",
       email: "poorani0307@gmail.com",
       phone: "+919207386562",
-      role: "custodian",
+      role: "employee",
       department: "Finance",
       otpEnabled: true,
       isActive: true,
       createdBy: admin._id,
     });
-    console.log("✅ Custodian 1 created:", custodian1.email);
+    console.log("✅ Employee 1 created:", custodian1.email);
 
     const custodian2 = await User.create({
       name: "Accounts Handler",
-      email: "custodian2@pettycash.com",
+      email: "employee2@pettycash.com",
       phone: "+919876543213",
-      role: "custodian",
+      role: "employee",
       department: "Accounts",
       otpEnabled: true,
       isActive: true,
       createdBy: admin._id,
     });
-    console.log("✅ Custodian 2 created:", custodian2.email);
+    console.log("✅ Employee 2 created:", custodian2.email);
 
     // 3. Create Approver/Manager (Department Level)
     const approver1 = await User.create({
@@ -157,24 +157,20 @@ const seedDatabase = async () => {
     await Category.insertMany(categories);
     console.log("✅ Categories created:", categories.length);
 
-    // Initialize balance accounts for each custodian
+    // Initialize balance accounts for each employee
     await Balance.create({
       accountType: "petty_cash_bank",
-      custodian: custodian1._id,
       currentBalance: 100000, // ₹1,00,000 initial balance
       totalReceived: 100000,
       totalSpent: 0,
-      currency: "INR",
       lastUpdated: new Date(),
     });
 
     await Balance.create({
       accountType: "petty_cash_physical",
-      custodian: custodian2._id,
       currentBalance: 50000, // ₹50,000 initial balance
       totalReceived: 50000,
       totalSpent: 0,
-      currency: "INR",
       lastUpdated: new Date(),
     });
 
@@ -195,9 +191,9 @@ const seedDatabase = async () => {
     console.log("   - Approve expenses (unlimited authority)");
     console.log("   - View all reports\n");
 
-    console.log("2. PETTY-CASH CUSTODIAN/ACCOUNTANT:");
+    console.log("2. EMPLOYEE (FINANCE/ACCOUNTS):");
     console.log("   a) Poorani - Email: poorani0307@gmail.com");
-    console.log("   b) Accounts Handler - Email: custodian2@pettycash.com");
+    console.log("   b) Accounts Handler - Email: employee2@pettycash.com");
     console.log("   Access: Manage assigned petty-cash account");
     console.log("   - Receive funds (bank transfer or cash)");
     console.log("   - Manage petty-cash fund");

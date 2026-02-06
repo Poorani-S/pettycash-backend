@@ -25,6 +25,12 @@ exports.protect = async (req, res, next) => {
           .json({ success: false, message: "User not found" });
       }
 
+      // Normalize legacy roles in-memory so authorization and filtering behave consistently.
+      // (Old databases may still contain these values.)
+      if (req.user.role === "custodian" || req.user.role === "handler") {
+        req.user.role = "employee";
+      }
+
       if (!req.user.isActive) {
         return res
           .status(401)
@@ -118,11 +124,11 @@ exports.canApprove = async (req, res, next) => {
     });
   }
 
-  const allowedRoles = ["admin", "approver"];
+  const allowedRoles = ["admin", "approver", "manager"];
   if (!allowedRoles.includes(req.user.role)) {
     return res.status(403).json({
       success: false,
-      message: "Only admins and approvers can approve transactions",
+      message: "Only admins, managers, and approvers can approve transactions",
     });
   }
 
