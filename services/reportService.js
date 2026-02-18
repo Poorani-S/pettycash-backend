@@ -4,6 +4,7 @@ const nodemailer = require("nodemailer");
 const sgMail = require("@sendgrid/mail");
 const Transaction = require("../models/Transaction");
 const User = require("../models/User");
+const Category = require("../models/Category");
 const fs = require("fs");
 const path = require("path");
 const { addPDFHeader, addPDFFooter, LOGO_PATH } = require("../utils/pdfHeader");
@@ -551,6 +552,15 @@ const sendAdminReportToCEO = async (adminUserId) => {
     };
   } catch (error) {
     console.error("Error sending admin report to CEO:", error);
+
+    // Log more details for SendGrid errors
+    if (error.response && error.response.body) {
+      console.error(
+        "SendGrid Error Details:",
+        JSON.stringify(error.response.body, null, 2),
+      );
+    }
+
     return { success: false, error: error.message };
   }
 };
