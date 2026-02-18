@@ -172,15 +172,7 @@ const transactionSchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: [
-        "draft",
-        "pending",
-        "pending_approval",
-        "info_requested",
-        "approved",
-        "rejected",
-        "paid",
-      ],
+      enum: ["pending", "approved", "rejected"],
       default: "pending",
     },
     approvals: [approvalSchema],

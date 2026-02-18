@@ -185,10 +185,7 @@ exports.getFinancialSummary = async (req, res) => {
       },
     ]);
 
-    const pendingStatuses = ["pending", "pending_approval", "info_requested"];
-    const approvedStatuses = ["approved", "paid"];
-    const rejectedStatuses = ["rejected"];
-
+    // Simplified to three statuses: pending, approved, rejected
     const expenseStatusMap = expenseByStatus.reduce((acc, row) => {
       acc[row._id] = {
         count: row.count || 0,
@@ -197,19 +194,15 @@ exports.getFinancialSummary = async (req, res) => {
       return acc;
     }, {});
 
-    const sumGroups = (statuses) =>
-      statuses.reduce(
-        (acc, status) => {
-          acc.count += expenseStatusMap[status]?.count || 0;
-          acc.totalAmount += expenseStatusMap[status]?.totalAmount || 0;
-          return acc;
-        },
-        { count: 0, totalAmount: 0 },
-      );
-
-    const pending = sumGroups(pendingStatuses);
-    const approved = sumGroups(approvedStatuses);
-    const rejected = sumGroups(rejectedStatuses);
+    const pending = expenseStatusMap["pending"] || { count: 0, totalAmount: 0 };
+    const approved = expenseStatusMap["approved"] || {
+      count: 0,
+      totalAmount: 0,
+    };
+    const rejected = expenseStatusMap["rejected"] || {
+      count: 0,
+      totalAmount: 0,
+    };
     const totalTransactions = Object.values(expenseStatusMap).reduce(
       (sum, s) => sum + (s.count || 0),
       0,
@@ -319,9 +312,9 @@ exports.getSummaryReport = async (req, res) => {
       .populate("submittedBy", "name email")
       .sort({ transactionDate: -1 });
 
-    // Define status groups for accurate counting
-    const pendingStatuses = ["pending", "pending_approval", "info_requested"];
-    const approvedStatuses = ["approved", "paid"];
+    // Define status groups - now simplified to three categories
+    const pendingStatuses = ["pending"];
+    const approvedStatuses = ["approved"];
     const rejectedStatuses = ["rejected"];
 
     const summary = {
@@ -638,7 +631,7 @@ exports.exportPDF = async (req, res) => {
 
     const isPaidStatus = (status) => {
       const normalized = (status || "").toString().toLowerCase();
-      return normalized === "approved" || normalized === "paid";
+      return normalized === "approved";
     };
 
     const toNumber = (value) => {
@@ -1016,7 +1009,7 @@ exports.exportExcel = async (req, res) => {
 
     const isPaidStatus = (status) => {
       const normalized = (status || "").toString().toLowerCase();
-      return normalized === "approved" || normalized === "paid";
+      return normalized === "approved";
     };
 
     const toNumber = (value) => {
@@ -1168,7 +1161,7 @@ exports.getBalanceOverview = async (req, res) => {
 
     // Get pending (committed) expenses
     const pendingExpenses = await Transaction.find({
-      status: { $in: ["pending", "pending_approval", "info_requested"] },
+      status: { $in: ["pending"] },
     });
 
     const committedAmount = pendingExpenses.reduce(
@@ -1290,7 +1283,7 @@ exports.getReconciliationReport = async (req, res) => {
     let discrepancyAnalysis = null;
     if (discrepancy && Math.abs(discrepancy) > 0.01) {
       const pendingExpenses = await Transaction.find({
-        status: { $in: ["pending", "pending_approval"] },
+        status: { $in: ["pending"] },
       });
 
       discrepancyAnalysis = {
