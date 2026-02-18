@@ -363,6 +363,11 @@ const generateExcelReport = async (transactions, adminUser) => {
  */
 const sendAdminReportToCEO = async (adminUserId) => {
   try {
+    // Ensure SendGrid API key is set (in case .env was updated)
+    if (process.env.SENDGRID_API_KEY) {
+      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+    }
+
     // Get admin user
     const adminUser = await User.findById(adminUserId);
     if (!adminUser || adminUser.role !== "admin") {
@@ -494,22 +499,10 @@ const sendAdminReportToCEO = async (adminUserId) => {
       console.log("📧 Sending CEO report via SendGrid...");
       const msg = {
         to: ceoEmail,
-        from: {
-          email: process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER,
-          name: "Kambaa Petty Cash System",
-        },
-        replyTo: process.env.EMAIL_USER || "poorani372006@gmail.com",
+        from: process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER,
         subject: `Admin Transaction Report - ${reportDate} | Kambaa`,
         html: htmlContent,
         attachments: [pdfAttachment, excelAttachment],
-        // Add tracking settings to help with deliverability
-        trackingSettings: {
-          clickTracking: { enable: false },
-          openTracking: { enable: false },
-        },
-        mailSettings: {
-          bypassListManagement: { enable: true },
-        },
       };
 
       const response = await sgMail.send(msg);
