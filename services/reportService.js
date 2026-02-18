@@ -493,17 +493,28 @@ const sendAdminReportToCEO = async (adminUserId) => {
       console.log("📧 Sending CEO report via SendGrid...");
       const msg = {
         to: ceoEmail,
-        from:
-          process.env.SENDGRID_FROM_EMAIL ||
-          process.env.EMAIL_USER ||
-          "noreply@kambaa.com",
+        from: {
+          email: process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER,
+          name: "Kambaa Petty Cash System",
+        },
+        replyTo: process.env.EMAIL_USER || "poorani372006@gmail.com",
         subject: `Admin Transaction Report - ${reportDate} | Kambaa`,
         html: htmlContent,
         attachments: [pdfAttachment, excelAttachment],
+        // Add tracking settings to help with deliverability
+        trackingSettings: {
+          clickTracking: { enable: false },
+          openTracking: { enable: false },
+        },
+        mailSettings: {
+          bypassListManagement: { enable: true },
+        },
       };
 
-      await sgMail.send(msg);
+      const response = await sgMail.send(msg);
       console.log(`✅ Admin report sent to CEO via SendGrid: ${ceoEmail}`);
+      console.log(`   Status: ${response[0].statusCode}`);
+      console.log(`   ⚠️  If email not received, check spam folder!`);
     }
     // Fallback to SMTP (may fail on hosting platforms that block SMTP ports)
     else {
