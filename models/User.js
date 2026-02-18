@@ -38,14 +38,12 @@ const userSchema = new mongoose.Schema(
     role: {
       type: String,
       enum: [
-        "admin", // System Administrator/CEO - Full access, highest authority
+        "admin", // System Administrator - Full access, highest authority
         "manager", // Manager - Reviews and approves employee expenses
         "employee", // Employee - Submits expenses to manager
         "intern", // Intern - Entry-level, reports to manager
-        "custodian", // Petty-Cash Custodian/Accountant - Manages petty cash
         "approver", // Approver/Manager - Reviews and approves expenses (legacy)
         "auditor", // Auditor - View-only access for audits
-        "handler", // Legacy role, maps to custodian
       ],
       default: "employee",
     },
@@ -63,12 +61,6 @@ const userSchema = new mongoose.Schema(
     approvalLimit: {
       type: Number,
       default: null, // null means unlimited (for admin)
-    },
-    phone: {
-      type: String,
-      required: [true, "Please add official phone number"],
-      trim: true,
-      match: [/^[\d\+\-\(\)\s]+$/, "Please add a valid phone number"],
     },
     // Bank Details
     bankDetails: {

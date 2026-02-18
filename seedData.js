@@ -147,6 +147,7 @@ const seedData = async () => {
     console.log("\n3. Employee:");
     console.log("   Email: 241cd030@srcw.ac.in");
     console.log("   Password: employee123");
+    console.log("\nCEO Email (for reports): mikeykalai17@gmail.com");
     console.log("\n=================================\n");
 
     process.exit(0);

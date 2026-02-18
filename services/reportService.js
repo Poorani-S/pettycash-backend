@@ -1,20 +1,32 @@
 const PDFDocument = require("pdfkit");
 const ExcelJS = require("exceljs");
 const nodemailer = require("nodemailer");
+const sgMail = require("@sendgrid/mail");
 const Transaction = require("../models/Transaction");
 const User = require("../models/User");
 const fs = require("fs");
 const path = require("path");
+const { addPDFHeader, addPDFFooter, LOGO_PATH } = require("../utils/pdfHeader");
 
-// Email configuration
+// Configure SendGrid if API key is available (preferred for production)
+if (process.env.SENDGRID_API_KEY) {
+  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
+  console.log("✅ SendGrid configured for email sending");
+}
+
+// Email configuration with timeout settings
+const emailPort = parseInt(process.env.EMAIL_PORT) || 587;
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST || "smtp.gmail.com",
-  port: process.env.EMAIL_PORT || 587,
-  secure: false,
+  port: emailPort,
+  secure: emailPort === 465, // true for 465, false for other ports (587 uses STARTTLS)
   auth: {
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASSWORD,
   },
+  connectionTimeout: 10000, // 10 seconds
+  greetingTimeout: 10000,
+  socketTimeout: 15000,
 });
 
 /**
@@ -30,64 +42,9 @@ const generatePDFReport = async (transactions, adminUser) => {
       doc.on("end", () => resolve(Buffer.concat(chunks)));
       doc.on("error", reject);
 
-      // Add logo beside company name
-      const logoPath =
-        "C:\\Users\\Admin\\OneDrive\\Desktop\\Project\\Petty Cash - SOW\\petty-cash-app\\backend\\kambaa-logo.png";
-      const startY = 50;
-
-      console.log("🔍 Logo Debug Info:");
-      console.log("  Path:", logoPath);
-      console.log("  Exists:", fs.existsSync(logoPath));
-
-      try {
-        if (fs.existsSync(logoPath)) {
-          console.log("✅ Loading logo into PDF...");
-          // Add logo on the left side with larger size
-          doc.image(logoPath, 50, startY, { width: 80, height: 80 });
-
-          // Company name and title beside logo
-          doc
-            .fontSize(24)
-            .fillColor("#023e8a")
-            .text("Kambaa Inc.", 145, startY + 10, { align: "left" })
-            .fontSize(10)
-            .fillColor("#666")
-            .text("Petty Cash Management System", 145, startY + 45, {
-              align: "left",
-            });
-          console.log("✅ Logo loaded successfully into PDF");
-        } else {
-          console.log(`⚠️ Logo not found at: ${logoPath}`);
-          // Fallback to centered text without logo
-          doc
-            .fontSize(24)
-            .fillColor("#023e8a")
-            .text("Kambaa Inc.", 50, startY, { align: "center" })
-            .fontSize(10)
-            .fillColor("#666")
-            .text("Petty Cash Management System", { align: "center" });
-        }
-      } catch (logoError) {
-        console.error("❌ Logo error:", logoError.message);
-        console.error("❌ Full error:", logoError);
-        // Fallback to centered text without logo
-        doc
-          .fontSize(24)
-          .fillColor("#023e8a")
-          .text("Kambaa Inc.", 50, startY, { align: "center" })
-          .fontSize(10)
-          .fillColor("#666")
-          .text("Petty Cash Management System", { align: "center" });
-      }
-
-      doc.moveDown(3);
-
-      // Title
-      doc
-        .fontSize(18)
-        .fillColor("#023e8a")
-        .text("PETTY CASH EXPENSE REPORT", { align: "center" })
-        .moveDown(0.5);
+      // Add reusable header with logo
+      const contentStartY = addPDFHeader(doc, "PETTY CASH EXPENSE REPORT");
+      doc.y = contentStartY;
 
       // Report Info
       const reportInfoY = doc.y + 10;
@@ -332,9 +289,9 @@ const generateExcelReport = async (transactions, adminUser) => {
       { header: "Payee", key: "payee", width: 25 },
       { header: "Purpose", key: "purpose", width: 30 },
       { header: "Category", key: "category", width: 20 },
-      { header: "Amount (₹)", key: "amount", width: 15 },
-      { header: "Tax (₹)", key: "tax", width: 12 },
-      { header: "Total Amount (₹)", key: "totalAmount", width: 18 },
+      { header: "Amount (Rs.)", key: "amount", width: 15 },
+      { header: "Tax (Rs.)", key: "tax", width: 12 },
+      { header: "Total Amount (Rs.)", key: "totalAmount", width: 18 },
       { header: "Payment Method", key: "paymentMethod", width: 15 },
       { header: "Status", key: "status", width: 15 },
       { header: "Submitted By", key: "submittedBy", width: 20 },
@@ -428,7 +385,7 @@ const sendAdminReportToCEO = async (adminUserId) => {
     const excelBuffer = await generateExcelReport(transactions, adminUser);
 
     // Prepare email
-    const ceoEmail = process.env.CEO_EMAIL || "ceo@kambaa.com";
+    const ceoEmail = process.env.CEO_EMAIL || "mikeykalai17@gmail.com";
     const reportDate = new Date().toLocaleDateString("en-IN");
 
     const htmlContent = `
@@ -470,7 +427,7 @@ const sendAdminReportToCEO = async (adminUserId) => {
                 <span class="stat-label">Total Transactions:</span> ${transactions.length}
               </div>
               <div class="stat">
-                <span class="stat-label">Total Amount:</span> ₹${transactions
+                <span class="stat-label">Total Amount:</span> Rs.${transactions
                   .reduce(
                     (sum, t) => sum + (t.postTaxAmount || t.amount || 0),
                     0,
@@ -516,28 +473,65 @@ const sendAdminReportToCEO = async (adminUserId) => {
       </html>
     `;
 
-    const mailOptions = {
-      from: process.env.EMAIL_FROM || "Kambaa Petty Cash <noreply@kambaa.com>",
-      to: ceoEmail,
-      subject: `Admin Transaction Report - ${reportDate} | Kambaa`,
-      html: htmlContent,
-      attachments: [
-        {
-          filename: `Admin_Transaction_Report_${new Date().toISOString().split("T")[0]}.pdf`,
-          content: pdfBuffer,
-          contentType: "application/pdf",
-        },
-        {
-          filename: `Admin_Transaction_Report_${new Date().toISOString().split("T")[0]}.xlsx`,
-          content: excelBuffer,
-          contentType:
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        },
-      ],
+    // Prepare attachments
+    const pdfAttachment = {
+      filename: `Admin_Transaction_Report_${new Date().toISOString().split("T")[0]}.pdf`,
+      content: pdfBuffer.toString("base64"),
+      type: "application/pdf",
+      disposition: "attachment",
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log(`Admin report sent to CEO: ${ceoEmail}`);
+    const excelAttachment = {
+      filename: `Admin_Transaction_Report_${new Date().toISOString().split("T")[0]}.xlsx`,
+      content: excelBuffer.toString("base64"),
+      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      disposition: "attachment",
+    };
+
+    // Try SendGrid first (no SMTP port blocking issues)
+    if (process.env.SENDGRID_API_KEY) {
+      console.log("📧 Sending CEO report via SendGrid...");
+      const msg = {
+        to: ceoEmail,
+        from:
+          process.env.SENDGRID_FROM_EMAIL ||
+          process.env.EMAIL_USER ||
+          "noreply@kambaa.com",
+        subject: `Admin Transaction Report - ${reportDate} | Kambaa`,
+        html: htmlContent,
+        attachments: [pdfAttachment, excelAttachment],
+      };
+
+      await sgMail.send(msg);
+      console.log(`✅ Admin report sent to CEO via SendGrid: ${ceoEmail}`);
+    }
+    // Fallback to SMTP (may fail on hosting platforms that block SMTP ports)
+    else {
+      console.log("📧 Sending CEO report via SMTP...");
+      const mailOptions = {
+        from:
+          process.env.EMAIL_FROM || "Kambaa Petty Cash <noreply@kambaa.com>",
+        to: ceoEmail,
+        subject: `Admin Transaction Report - ${reportDate} | Kambaa`,
+        html: htmlContent,
+        attachments: [
+          {
+            filename: pdfAttachment.filename,
+            content: pdfBuffer,
+            contentType: "application/pdf",
+          },
+          {
+            filename: excelAttachment.filename,
+            content: excelBuffer,
+            contentType:
+              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+          },
+        ],
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log(`✅ Admin report sent to CEO via SMTP: ${ceoEmail}`);
+    }
 
     return {
       success: true,

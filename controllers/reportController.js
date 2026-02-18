@@ -7,6 +7,12 @@ const PDFDocument = require("pdfkit");
 const ExcelJS = require("exceljs");
 const path = require("path");
 const fs = require("fs");
+const {
+  addPDFHeader,
+  addPageHeader,
+  addPDFFooter,
+  LOGO_PATH,
+} = require("../utils/pdfHeader");
 
 // Helper function to get date range
 const getDateRange = (period) => {
@@ -14,6 +20,10 @@ const getDateRange = (period) => {
   let startDate, endDate;
 
   switch (period) {
+    case "all":
+      // Return null to indicate no date filtering
+      return null;
+
     case "today":
       startDate = new Date(now.setHours(0, 0, 0, 0));
       endDate = new Date(now.setHours(23, 59, 59, 999));
@@ -44,11 +54,211 @@ const getDateRange = (period) => {
       break;
 
     default:
-      startDate = new Date(now.getFullYear(), now.getMonth(), 1);
-      endDate = new Date();
+      // For unknown periods, return null (no date filter)
+      return null;
   }
 
   return { startDate, endDate };
+};
+
+const buildTransactionRoleMatch = async (user) => {
+  if (!user) return {};
+
+  if (user.role === "employee" || user.role === "intern") {
+    return {
+      $or: [{ submittedBy: user._id }, { requestedBy: user._id }],
+    };
+  }
+
+  if (user.role === "manager" || user.role === "approver") {
+    const teamMembers = await User.find({ managerId: user._id }, "_id");
+    const teamMemberIds = teamMembers.map((member) => member._id);
+    return {
+      $or: [
+        { submittedBy: user._id },
+        { requestedBy: user._id },
+        { submittedBy: { $in: teamMemberIds } },
+        { requestedBy: { $in: teamMemberIds } },
+      ],
+    };
+  }
+
+  // Admin, employee, and auditor can see all transactions
+  return {};
+};
+
+// @desc    Get unified financial summary (Fund Transfers + Expense Transactions)
+// @route   GET /api/reports/financial-summary
+// @access  Private
+exports.getFinancialSummary = async (req, res) => {
+  try {
+    const { startDate, endDate, period } = req.query;
+
+    // Date filters
+    let fundTransferMatch = {};
+    let transactionMatch = {};
+
+    if (startDate && endDate) {
+      fundTransferMatch.transferDate = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate),
+      };
+      transactionMatch.transactionDate = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate),
+      };
+    } else if (period && period !== "all") {
+      const range = getDateRange(period);
+      if (range) {
+        fundTransferMatch.transferDate = {
+          $gte: range.startDate,
+          $lte: range.endDate,
+        };
+        transactionMatch.transactionDate = {
+          $gte: range.startDate,
+          $lte: range.endDate,
+        };
+      }
+    }
+
+    // Fund transfers summary
+    // NOTE: fund transfer access is restricted elsewhere to admin/manager.
+    // Keep this endpoint usable for all roles, but only return fund transfer aggregates to admin/manager.
+    const canSeeFundTransfers =
+      req.user?.role === "admin" || req.user?.role === "manager";
+
+    let byTypeArr = [];
+    let overallObj = { total: 0, count: 0 };
+
+    if (canSeeFundTransfers) {
+      const fundTransferAgg = await FundTransfer.aggregate([
+        { $match: fundTransferMatch },
+        {
+          $facet: {
+            byType: [
+              {
+                $group: {
+                  _id: "$transferType",
+                  totalAmount: { $sum: "$amount" },
+                  count: { $sum: 1 },
+                },
+              },
+              { $sort: { totalAmount: -1 } },
+            ],
+            overall: [
+              {
+                $group: {
+                  _id: null,
+                  total: { $sum: "$amount" },
+                  count: { $sum: 1 },
+                },
+              },
+            ],
+          },
+        },
+      ]);
+
+      byTypeArr = fundTransferAgg?.[0]?.byType || [];
+      overallObj = fundTransferAgg?.[0]?.overall?.[0] || { total: 0, count: 0 };
+    }
+
+    const fundByType = byTypeArr.reduce((acc, row) => {
+      acc[row._id] = {
+        totalAmount: row.totalAmount || 0,
+        count: row.count || 0,
+      };
+      return acc;
+    }, {});
+
+    // Expense transactions summary (role-filtered)
+    const roleMatch = await buildTransactionRoleMatch(req.user);
+    const expenseMatch = { ...transactionMatch, ...roleMatch };
+
+    const expenseByStatus = await Transaction.aggregate([
+      { $match: expenseMatch },
+      {
+        $group: {
+          _id: "$status",
+          count: { $sum: 1 },
+          totalAmount: { $sum: { $ifNull: ["$postTaxAmount", 0] } },
+        },
+      },
+    ]);
+
+    const pendingStatuses = ["pending", "pending_approval", "info_requested"];
+    const approvedStatuses = ["approved", "paid"];
+    const rejectedStatuses = ["rejected"];
+
+    const expenseStatusMap = expenseByStatus.reduce((acc, row) => {
+      acc[row._id] = {
+        count: row.count || 0,
+        totalAmount: row.totalAmount || 0,
+      };
+      return acc;
+    }, {});
+
+    const sumGroups = (statuses) =>
+      statuses.reduce(
+        (acc, status) => {
+          acc.count += expenseStatusMap[status]?.count || 0;
+          acc.totalAmount += expenseStatusMap[status]?.totalAmount || 0;
+          return acc;
+        },
+        { count: 0, totalAmount: 0 },
+      );
+
+    const pending = sumGroups(pendingStatuses);
+    const approved = sumGroups(approvedStatuses);
+    const rejected = sumGroups(rejectedStatuses);
+    const totalTransactions = Object.values(expenseStatusMap).reduce(
+      (sum, s) => sum + (s.count || 0),
+      0,
+    );
+    const totalAmount = Object.values(expenseStatusMap).reduce(
+      (sum, s) => sum + (s.totalAmount || 0),
+      0,
+    );
+
+    res.status(200).json({
+      success: true,
+      data: {
+        dateRange: {
+          start:
+            expenseMatch.transactionDate?.$gte ||
+            fundTransferMatch.transferDate?.$gte ||
+            null,
+          end:
+            expenseMatch.transactionDate?.$lte ||
+            fundTransferMatch.transferDate?.$lte ||
+            null,
+        },
+        fundTransfers: {
+          overall: {
+            total: overallObj.total || 0,
+            count: overallObj.count || 0,
+          },
+          byType: fundByType,
+          rawByType: byTypeArr,
+        },
+        expenseTransactions: {
+          byStatus: expenseStatusMap,
+          summary: {
+            totalTransactions,
+            totalAmount,
+            approvedCount: approved.count,
+            approvedAmount: approved.totalAmount,
+            pendingCount: pending.count,
+            pendingAmount: pending.totalAmount,
+            rejectedCount: rejected.count,
+            rejectedAmount: rejected.totalAmount,
+          },
+        },
+      },
+    });
+  } catch (error) {
+    console.error("Financial summary error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
 };
 
 // @desc    Get transaction summary report
@@ -66,32 +276,53 @@ exports.getSummaryReport = async (req, res) => {
           $lte: new Date(endDate),
         },
       };
-    } else if (period) {
+    } else if (period && period !== "all") {
       const range = getDateRange(period);
-      dateFilter = {
-        transactionDate: {
-          $gte: range.startDate,
-          $lte: range.endDate,
-        },
-      };
+      if (range) {
+        dateFilter = {
+          transactionDate: {
+            $gte: range.startDate,
+            $lte: range.endDate,
+          },
+        };
+      }
+      // If range is null (period="all"), dateFilter stays empty - no date filtering
     }
 
     let matchQuery = { ...dateFilter };
     if (category) matchQuery.category = category;
     if (status) matchQuery.status = status;
 
-    // Role-based filtering
-    if (req.user.role === "handler") {
+    // Role-based filtering - Follow hierarchy (same as transactionController)
+    if (req.user.role === "employee" || req.user.role === "intern") {
+      // Employees and interns can only see their own transactions
       matchQuery.$or = [
         { submittedBy: req.user._id },
         { requestedBy: req.user._id },
       ];
+    } else if (req.user.role === "manager" || req.user.role === "approver") {
+      // Managers can see their own and their team's transactions
+      const teamMembers = await User.find({ managerId: req.user._id }, "_id");
+      const teamMemberIds = teamMembers.map((member) => member._id);
+
+      matchQuery.$or = [
+        { submittedBy: req.user._id },
+        { requestedBy: req.user._id },
+        { submittedBy: { $in: teamMemberIds } },
+        { requestedBy: { $in: teamMemberIds } },
+      ];
     }
+    // Admin, employee, and auditor can see all transactions
 
     const transactions = await Transaction.find(matchQuery)
       .populate("category", "name code")
       .populate("submittedBy", "name email")
       .sort({ transactionDate: -1 });
+
+    // Define status groups for accurate counting
+    const pendingStatuses = ["pending", "pending_approval", "info_requested"];
+    const approvedStatuses = ["approved", "paid"];
+    const rejectedStatuses = ["rejected"];
 
     const summary = {
       totalTransactions: transactions.length,
@@ -99,17 +330,23 @@ exports.getSummaryReport = async (req, res) => {
         (sum, t) => sum + (t.postTaxAmount || t.amount),
         0,
       ),
-      approvedCount: transactions.filter((t) => t.status === "approved").length,
+      approvedCount: transactions.filter((t) =>
+        approvedStatuses.includes(t.status),
+      ).length,
       approvedAmount: transactions
-        .filter((t) => t.status === "approved")
+        .filter((t) => approvedStatuses.includes(t.status))
         .reduce((sum, t) => sum + (t.postTaxAmount || t.amount), 0),
-      pendingCount: transactions.filter((t) => t.status === "pending").length,
+      pendingCount: transactions.filter((t) =>
+        pendingStatuses.includes(t.status),
+      ).length,
       pendingAmount: transactions
-        .filter((t) => t.status === "pending")
+        .filter((t) => pendingStatuses.includes(t.status))
         .reduce((sum, t) => sum + (t.postTaxAmount || t.amount), 0),
-      rejectedCount: transactions.filter((t) => t.status === "rejected").length,
+      rejectedCount: transactions.filter((t) =>
+        rejectedStatuses.includes(t.status),
+      ).length,
       rejectedAmount: transactions
-        .filter((t) => t.status === "rejected")
+        .filter((t) => rejectedStatuses.includes(t.status))
         .reduce((sum, t) => sum + (t.postTaxAmount || t.amount), 0),
     };
 
@@ -179,24 +416,38 @@ exports.getCategoryReport = async (req, res) => {
           $lte: new Date(endDate),
         },
       };
-    } else if (period) {
+    } else if (period && period !== "all") {
       const range = getDateRange(period);
-      dateFilter = {
-        transactionDate: {
-          $gte: range.startDate,
-          $lte: range.endDate,
-        },
-      };
+      if (range) {
+        dateFilter = {
+          transactionDate: {
+            $gte: range.startDate,
+            $lte: range.endDate,
+          },
+        };
+      }
     }
 
     let matchQuery = { ...dateFilter, status: "approved" };
 
-    if (req.user.role === "handler") {
+    // Role-based filtering - Follow hierarchy (same as transactionController)
+    if (req.user.role === "employee" || req.user.role === "intern") {
       matchQuery.$or = [
         { submittedBy: req.user._id },
         { requestedBy: req.user._id },
       ];
+    } else if (req.user.role === "manager" || req.user.role === "approver") {
+      const teamMembers = await User.find({ managerId: req.user._id }, "_id");
+      const teamMemberIds = teamMembers.map((member) => member._id);
+
+      matchQuery.$or = [
+        { submittedBy: req.user._id },
+        { requestedBy: req.user._id },
+        { submittedBy: { $in: teamMemberIds } },
+        { requestedBy: { $in: teamMemberIds } },
+      ];
     }
+    // Admin, employee, and auditor can see all transactions
 
     const categoryReport = await Transaction.aggregate([
       { $match: matchQuery },
@@ -261,12 +512,24 @@ exports.getMonthlyTrend = async (req, res) => {
       status: "approved",
     };
 
-    if (req.user.role === "handler") {
+    // Role-based filtering - Follow hierarchy (same as transactionController)
+    if (req.user.role === "employee" || req.user.role === "intern") {
       matchQuery.$or = [
         { submittedBy: req.user._id },
         { requestedBy: req.user._id },
       ];
+    } else if (req.user.role === "manager" || req.user.role === "approver") {
+      const teamMembers = await User.find({ managerId: req.user._id }, "_id");
+      const teamMemberIds = teamMembers.map((member) => member._id);
+
+      matchQuery.$or = [
+        { submittedBy: req.user._id },
+        { requestedBy: req.user._id },
+        { submittedBy: { $in: teamMemberIds } },
+        { requestedBy: { $in: teamMemberIds } },
+      ];
     }
+    // Admin, employee, and auditor can see all transactions
 
     const monthlyData = await Transaction.aggregate([
       { $match: matchQuery },
@@ -333,44 +596,66 @@ exports.exportPDF = async (req, res) => {
           $lte: new Date(endDate),
         },
       };
-    } else if (period) {
+    } else if (period && period !== "all") {
       const range = getDateRange(period);
-      dateFilter = {
-        transactionDate: {
-          $gte: range.startDate,
-          $lte: range.endDate,
-        },
-      };
+      if (range) {
+        dateFilter = {
+          transactionDate: {
+            $gte: range.startDate,
+            $lte: range.endDate,
+          },
+        };
+      }
     }
 
     let matchQuery = { ...dateFilter };
     if (category) matchQuery.category = category;
     if (status) matchQuery.status = status;
 
-    if (req.user.role === "handler") {
+    // Role-based filtering - Follow hierarchy (same as transactionController)
+    if (req.user.role === "employee" || req.user.role === "intern") {
       matchQuery.$or = [
         { submittedBy: req.user._id },
         { requestedBy: req.user._id },
       ];
+    } else if (req.user.role === "manager" || req.user.role === "approver") {
+      const teamMembers = await User.find({ managerId: req.user._id }, "_id");
+      const teamMemberIds = teamMembers.map((member) => member._id);
+
+      matchQuery.$or = [
+        { submittedBy: req.user._id },
+        { requestedBy: req.user._id },
+        { submittedBy: { $in: teamMemberIds } },
+        { requestedBy: { $in: teamMemberIds } },
+      ];
     }
+    // Admin, employee, and auditor can see all transactions
 
     const transactions = await Transaction.find(matchQuery)
       .populate("category", "name code")
       .populate("submittedBy", "name email")
       .sort({ transactionDate: -1 });
 
+    const isPaidStatus = (status) => {
+      const normalized = (status || "").toString().toLowerCase();
+      return normalized === "approved" || normalized === "paid";
+    };
+
+    const toNumber = (value) => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : 0;
+    };
+
     const totalAmount = transactions.reduce(
-      (sum, t) => sum + (t.postTaxAmount || t.amount),
+      (sum, t) => sum + toNumber(t.postTaxAmount ?? t.amount ?? 0),
       0,
     );
     const approvedAmount = transactions
-      .filter((t) => t.status === "approved")
-      .reduce((sum, t) => sum + (t.postTaxAmount || t.amount), 0);
-    const paidCount = transactions.filter(
-      (t) => t.status === "approved",
-    ).length;
+      .filter((t) => isPaidStatus(t.status))
+      .reduce((sum, t) => sum + toNumber(t.postTaxAmount ?? t.amount ?? 0), 0);
+    const paidCount = transactions.filter((t) => isPaidStatus(t.status)).length;
     const unpaidCount = transactions.filter(
-      (t) => t.status !== "approved",
+      (t) => !isPaidStatus(t.status),
     ).length;
 
     const doc = new PDFDocument({ margin: 40, size: "A4" });
@@ -383,73 +668,105 @@ exports.exportPDF = async (req, res) => {
 
     doc.pipe(res);
 
-    // Add Kambaa Logo
-    const logoPath = path.join(__dirname, "../../public/kambaa-logo.png");
-    if (fs.existsSync(logoPath)) {
-      doc.image(logoPath, 40, 30, { width: 100 });
-    }
-
-    // Company Header
-    doc
-      .fontSize(18)
-      .fillColor("#023e8a")
-      .text("Kambaa Inc.", 150, 40, { align: "left" })
-      .fontSize(10)
-      .fillColor("#666")
-      .text("Petty Cash Management System", 150, 62, { align: "left" });
-
-    // Report Title
-    doc
-      .fontSize(16)
-      .fillColor("#023e8a")
-      .text("PETTY CASH EXPENSE REPORT", 40, 100, { align: "center" })
-      .moveDown(0.5);
+    // Add reusable header with logo
+    const contentStartY = addPDFHeader(doc, "PETTY CASH EXPENSE REPORT");
 
     // Report Info Box
-    const infoBoxY = 130;
-    doc.rect(40, infoBoxY, 515, 50).fillAndStroke("#f0f9ff", "#0077b6");
+    const infoBoxY = contentStartY + 5;
+    const pageWidth = 595.28; // A4 width in points
+    const margin = 40;
+    const boxWidth = pageWidth - margin * 2;
+    const paddingX = 10;
+    const paddingY = 8;
+    const colGap = 12;
+    const leftColWidth = Math.floor((boxWidth - paddingX * 2 - colGap) * 0.62);
+    const rightColWidth = boxWidth - paddingX * 2 - colGap - leftColWidth;
+    const leftX = margin + paddingX;
+    const rightX = leftX + leftColWidth + colGap;
+    const lineGap = 4;
+
+    const reportPeriodText = `Report Period: ${startDate ? new Date(startDate).toLocaleDateString("en-IN") : period || "All Time"} - ${endDate ? new Date(endDate).toLocaleDateString("en-IN") : "Present"}`;
+    const generatedOnText = `Generated On: ${new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`;
+    const totalTransactionsText = `Total Transactions: ${transactions.length}`;
+    const totalAmountText = `Total Amount: Rs.${totalAmount.toLocaleString("en-IN")}`;
+
+    doc.fontSize(9).fillColor("#023e8a");
+    const leftHeight =
+      doc.heightOfString(reportPeriodText, { width: leftColWidth }) +
+      lineGap +
+      doc.heightOfString(generatedOnText, { width: leftColWidth });
+    const rightHeight =
+      doc.heightOfString(totalTransactionsText, { width: rightColWidth }) +
+      lineGap +
+      doc.heightOfString(totalAmountText, { width: rightColWidth });
+    const infoBoxHeight = Math.max(leftHeight, rightHeight) + paddingY * 2;
 
     doc
-      .fontSize(9)
-      .fillColor("#023e8a")
-      .text(
-        `Report Period: ${startDate ? new Date(startDate).toLocaleDateString("en-IN") : period || "All Time"} - ${endDate ? new Date(endDate).toLocaleDateString("en-IN") : "Present"}`,
-        50,
-        infoBoxY + 10,
-      )
-      .text(
-        `Generated On: ${new Date().toLocaleDateString("en-IN", { weekday: "long", year: "numeric", month: "long", day: "numeric" })}`,
-        50,
-        infoBoxY + 25,
-      )
-      .text(`Total Transactions: ${transactions.length}`, 300, infoBoxY + 10)
-      .text(
-        `Total Amount: Rs.${totalAmount.toLocaleString("en-IN")}`,
-        300,
-        infoBoxY + 25,
-      );
+      .rect(margin, infoBoxY, boxWidth, infoBoxHeight)
+      .fillAndStroke("#f0f9ff", "#0077b6");
+
+    // fillAndStroke changes the current fill color; reset it for text
+    doc.fontSize(9).fillColor("#023e8a");
+
+    const leftLine1Height = doc.heightOfString(reportPeriodText, {
+      width: leftColWidth,
+    });
+    const rightLine1Height = doc.heightOfString(totalTransactionsText, {
+      width: rightColWidth,
+    });
+
+    doc.text(reportPeriodText, leftX, infoBoxY + paddingY, {
+      width: leftColWidth,
+    });
+    doc.text(
+      generatedOnText,
+      leftX,
+      infoBoxY + paddingY + leftLine1Height + lineGap,
+      {
+        width: leftColWidth,
+      },
+    );
+    doc.text(totalTransactionsText, rightX, infoBoxY + paddingY, {
+      width: rightColWidth,
+    });
+    doc.text(
+      totalAmountText,
+      rightX,
+      infoBoxY + paddingY + rightLine1Height + lineGap,
+      {
+        width: rightColWidth,
+      },
+    );
 
     // Summary Section
+    const summaryTitleY = infoBoxY + infoBoxHeight + 18;
+    const summaryY = summaryTitleY + 16;
     doc
       .fontSize(12)
       .fillColor("#023e8a")
-      .text("SUMMARY", 40, 195, { underline: true })
-      .moveDown(0.3);
-
-    const summaryY = 210;
+      .text("SUMMARY", margin, summaryTitleY, { underline: true });
     doc
       .fontSize(9)
       .fillColor("#333")
       .text(
         `Paid (Approved): ${paidCount} transactions - Rs.${approvedAmount.toLocaleString("en-IN")}`,
-        50,
+        margin + 10,
         summaryY,
+        { width: Math.floor((boxWidth - 20) * 0.62) },
       )
-      .text(`Pending/Rejected: ${unpaidCount} transactions`, 300, summaryY);
+      .text(
+        `Pending/Rejected: ${unpaidCount} transactions`,
+        margin + 10 + Math.floor((boxWidth - 20) * 0.62) + 12,
+        summaryY,
+        {
+          width: boxWidth - 20 - Math.floor((boxWidth - 20) * 0.62) - 12,
+        },
+      );
 
     // Table Header
-    const tableTop = 245;
-    const colWidths = [65, 80, 80, 90, 70, 65, 65];
+    const tableTop = summaryY + 35;
+    const tableWidth = pageWidth - margin * 2;
+    const colWidths = [70, 75, 80, 95, 70, 60, 65];
     const headers = [
       "Date",
       "User",
@@ -461,9 +778,9 @@ exports.exportPDF = async (req, res) => {
     ];
 
     // Header background
-    doc.rect(40, tableTop - 5, 515, 22).fill("#023e8a");
+    doc.rect(margin, tableTop - 5, tableWidth, 22).fill("#023e8a");
 
-    let xPos = 45;
+    let xPos = margin + 5;
     doc.fontSize(8).fillColor("#ffffff");
     headers.forEach((header, i) => {
       doc.text(header, xPos, tableTop, {
@@ -479,22 +796,16 @@ exports.exportPDF = async (req, res) => {
 
     transactions.forEach((txn, index) => {
       // Check for page break
-      if (yPos > 750) {
+      if (yPos > 720) {
         doc.addPage();
 
-        // Add logo on new page
-        if (fs.existsSync(logoPath)) {
-          doc.image(logoPath, 40, 20, { width: 60 });
-        }
-        doc
-          .fontSize(10)
-          .fillColor("#023e8a")
-          .text("Petty Cash Report (Continued)", 110, 35);
+        // Add page header with logo on new page
+        const newPageY = addPageHeader(doc);
 
         // Re-add table headers
-        const newTableTop = 60;
-        doc.rect(40, newTableTop - 5, 515, 22).fill("#023e8a");
-        xPos = 45;
+        const newTableTop = newPageY;
+        doc.rect(margin, newTableTop - 5, tableWidth, 22).fill("#023e8a");
+        xPos = margin + 5;
         doc.fontSize(8).fillColor("#ffffff");
         headers.forEach((header, i) => {
           doc.text(header, xPos, newTableTop, {
@@ -508,25 +819,36 @@ exports.exportPDF = async (req, res) => {
 
       // Alternate row colors
       if (index % 2 === 0) {
-        doc.rect(40, yPos - 3, 515, 18).fill("#f8fafc");
+        doc.rect(margin, yPos - 3, tableWidth, 18).fill("#f8fafc");
       }
 
-      const isPaid = txn.status === "approved";
+      const isPaid = isPaidStatus(txn.status);
       const paidStatus = isPaid ? "Yes" : "No";
       const paymentMode = txn.paymentMethod
         ? txn.paymentMethod.replace("_", " ").toUpperCase()
         : "N/A";
 
-      xPos = 45;
+      const statusText = (txn.status || "pending")
+        .toString()
+        .replace(/_/g, " ")
+        .replace(/\b\w/g, (ch) => ch.toUpperCase());
+
+      const dateText = txn.transactionDate
+        ? new Date(txn.transactionDate).toLocaleDateString("en-IN")
+        : "N/A";
+
+      const amountValue = toNumber(txn.postTaxAmount ?? txn.amount ?? 0);
+
+      xPos = margin + 5;
       const rowData = [
-        new Date(txn.transactionDate).toLocaleDateString("en-IN"),
+        dateText,
         (txn.submittedBy?.name || txn.payeeClientName || "N/A").substring(
           0,
           12,
         ),
-        `Rs.${(txn.postTaxAmount || txn.amount).toLocaleString("en-IN")}`,
+        `Rs.${amountValue.toLocaleString("en-IN")}`,
         (txn.purpose || "N/A").substring(0, 15),
-        txn.status.charAt(0).toUpperCase() + txn.status.slice(1),
+        statusText,
         paidStatus,
         paymentMode.substring(0, 10),
       ];
@@ -535,9 +857,11 @@ exports.exportPDF = async (req, res) => {
       rowData.forEach((data, i) => {
         if (i === 4) {
           // Status column
-          if (txn.status === "approved") {
+          if (isPaidStatus(txn.status)) {
             doc.fillColor("#059669");
-          } else if (txn.status === "rejected") {
+          } else if (
+            (txn.status || "").toString().toLowerCase() === "rejected"
+          ) {
             doc.fillColor("#dc2626");
           } else {
             doc.fillColor("#d97706");
@@ -559,30 +883,12 @@ exports.exportPDF = async (req, res) => {
     });
 
     // Draw table border
-    doc.rect(40, tableTop - 5, 515, yPos - tableTop + 10).stroke("#023e8a");
-
-    // Footer
     doc
-      .fontSize(8)
-      .fillColor("#666")
-      .text("---", 40, yPos + 15, { align: "center" })
-      .text(
-        "This is a system-generated report from Kambaa Petty Cash Management System",
-        40,
-        yPos + 28,
-        { align: "center" },
-      )
-      .text(
-        `Generated by: ${req.user?.name || "System"} | Date: ${new Date().toLocaleString("en-IN")}`,
-        40,
-        yPos + 40,
-        { align: "center" },
-      )
-      .fontSize(7)
-      .fillColor("#999")
-      .text("Confidential - For Internal Use Only", 40, yPos + 55, {
-        align: "center",
-      });
+      .rect(margin, tableTop - 5, tableWidth, yPos - tableTop + 10)
+      .stroke("#023e8a");
+
+    // Add footer using utility function
+    addPDFFooter(doc, req.user?.name || "System");
 
     doc.end();
   } catch (error) {
@@ -606,26 +912,40 @@ exports.exportExcel = async (req, res) => {
           $lte: new Date(endDate),
         },
       };
-    } else if (period) {
+    } else if (period && period !== "all") {
       const range = getDateRange(period);
-      dateFilter = {
-        transactionDate: {
-          $gte: range.startDate,
-          $lte: range.endDate,
-        },
-      };
+      if (range) {
+        dateFilter = {
+          transactionDate: {
+            $gte: range.startDate,
+            $lte: range.endDate,
+          },
+        };
+      }
     }
 
     let matchQuery = { ...dateFilter };
     if (category) matchQuery.category = category;
     if (status) matchQuery.status = status;
 
-    if (req.user.role === "handler") {
+    // Role-based filtering - Follow hierarchy (same as transactionController)
+    if (req.user.role === "employee" || req.user.role === "intern") {
       matchQuery.$or = [
         { submittedBy: req.user._id },
         { requestedBy: req.user._id },
       ];
+    } else if (req.user.role === "manager" || req.user.role === "approver") {
+      const teamMembers = await User.find({ managerId: req.user._id }, "_id");
+      const teamMemberIds = teamMembers.map((member) => member._id);
+
+      matchQuery.$or = [
+        { submittedBy: req.user._id },
+        { requestedBy: req.user._id },
+        { submittedBy: { $in: teamMemberIds } },
+        { requestedBy: { $in: teamMemberIds } },
+      ];
     }
+    // Admin, employee, and auditor can see all transactions
 
     const transactions = await Transaction.find(matchQuery)
       .populate("category", "name code")
@@ -663,7 +983,7 @@ exports.exportExcel = async (req, res) => {
       { header: "S.No", key: "sno", width: 8 },
       { header: "Date", key: "date", width: 14 },
       { header: "User", key: "user", width: 20 },
-      { header: "Amount (₹)", key: "amount", width: 15 },
+      { header: "Amount (Rs.)", key: "amount", width: 15 },
       { header: "Reason/Purpose", key: "reason", width: 35 },
       { header: "Paid", key: "paid", width: 10 },
       { header: "Status", key: "status", width: 12 },
@@ -676,7 +996,7 @@ exports.exportExcel = async (req, res) => {
       "S.No",
       "Date",
       "User",
-      "Amount (₹)",
+      "Amount (Rs.)",
       "Reason/Purpose",
       "Paid",
       "Status",
@@ -694,19 +1014,37 @@ exports.exportExcel = async (req, res) => {
     };
     headerRow.height = 25;
 
+    const isPaidStatus = (status) => {
+      const normalized = (status || "").toString().toLowerCase();
+      return normalized === "approved" || normalized === "paid";
+    };
+
+    const toNumber = (value) => {
+      const num = Number(value);
+      return Number.isFinite(num) ? num : 0;
+    };
+
+    const toTitleCase = (value) => {
+      const text = (value || "pending").toString().replace(/_/g, " ");
+      return text.replace(/\b\w/g, (ch) => ch.toUpperCase());
+    };
+
     // Add transaction data
     transactions.forEach((txn, index) => {
-      const isPaid = txn.status === "approved";
+      const isPaid = isPaidStatus(txn.status);
+      const dateText = txn.transactionDate
+        ? new Date(txn.transactionDate).toLocaleDateString("en-IN")
+        : "N/A";
       const row = worksheet.addRow({
         sno: index + 1,
-        date: new Date(txn.transactionDate).toLocaleDateString("en-IN"),
+        date: dateText,
         user: txn.submittedBy?.name || txn.payeeClientName || "N/A",
-        amount: txn.postTaxAmount || txn.amount || 0,
+        amount: toNumber(txn.postTaxAmount ?? txn.amount ?? 0),
         reason: txn.purpose || "N/A",
         paid: isPaid ? "Yes" : "No",
-        status: txn.status.charAt(0).toUpperCase() + txn.status.slice(1),
+        status: toTitleCase(txn.status),
         paymentMode: txn.paymentMethod
-          ? txn.paymentMethod.replace("_", " ").toUpperCase()
+          ? txn.paymentMethod.replace(/_/g, " ").toUpperCase()
           : "N/A",
       });
 
@@ -728,9 +1066,9 @@ exports.exportExcel = async (req, res) => {
 
       // Color code the Status column
       const statusCell = row.getCell(7);
-      if (txn.status === "approved") {
+      if (isPaidStatus(txn.status)) {
         statusCell.font = { color: { argb: "FF059669" } };
-      } else if (txn.status === "rejected") {
+      } else if ((txn.status || "").toString().toLowerCase() === "rejected") {
         statusCell.font = { color: { argb: "FFdc2626" } };
       } else {
         statusCell.font = { color: { argb: "FFd97706" } };
@@ -748,14 +1086,12 @@ exports.exportExcel = async (req, res) => {
     };
 
     const totalAmount = transactions.reduce(
-      (sum, t) => sum + (t.postTaxAmount || t.amount),
+      (sum, t) => sum + toNumber(t.postTaxAmount ?? t.amount ?? 0),
       0,
     );
-    const paidCount = transactions.filter(
-      (t) => t.status === "approved",
-    ).length;
+    const paidCount = transactions.filter((t) => isPaidStatus(t.status)).length;
     const unpaidCount = transactions.filter(
-      (t) => t.status !== "approved",
+      (t) => !isPaidStatus(t.status),
     ).length;
 
     worksheet.getCell(`A${summaryRow + 1}`).value = "Total Transactions:";
@@ -763,8 +1099,8 @@ exports.exportExcel = async (req, res) => {
     worksheet.getCell(`B${summaryRow + 1}`).font = { bold: true };
 
     worksheet.getCell(`A${summaryRow + 2}`).value = "Total Amount:";
-    worksheet.getCell(`B${summaryRow + 2}`).value =
-      `₹${totalAmount.toLocaleString("en-IN")}`;
+    worksheet.getCell(`B${summaryRow + 2}`).value = totalAmount;
+    worksheet.getCell(`B${summaryRow + 2}`).numFmt = '"Rs." #,##0.00';
     worksheet.getCell(`B${summaryRow + 2}`).font = { bold: true };
 
     worksheet.getCell(`A${summaryRow + 3}`).value = "Paid (Approved):";
@@ -780,10 +1116,11 @@ exports.exportExcel = async (req, res) => {
     };
 
     // Format amount column
-    worksheet.getColumn(4).numFmt = "₹#,##0.00";
+    worksheet.getColumn(4).numFmt = '"Rs." #,##0.00';
 
     // Add borders to data table
-    for (let i = 4; i <= worksheet.rowCount - 6; i++) {
+    const lastDataRow = 4 + transactions.length;
+    for (let i = 4; i <= lastDataRow; i++) {
       const row = worksheet.getRow(i);
       row.eachCell({ includeEmpty: true }, (cell) => {
         cell.border = {

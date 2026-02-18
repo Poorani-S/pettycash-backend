@@ -86,11 +86,11 @@ const notifyExpenseSubmitted = async (transaction, submitter, approvers) => {
 };
 
 /**
- * Notify custodian about approval/rejection
+ * Notify employee about approval/rejection
  */
 const notifyExpenseStatusUpdate = async (
   transaction,
-  custodian,
+  employee,
   approver,
   status,
   comments,
@@ -126,7 +126,7 @@ const notifyExpenseStatusUpdate = async (
             <p style="margin: 5px 0 0 0; opacity: 0.9;">${transaction.transactionNumber}</p>
           </div>
           <div class="content">
-            <p>Hello ${custodian.name},</p>
+            <p>Hello ${employee.name},</p>
             <p>Your expense submission has been <strong>${isApproved ? "approved" : "rejected"}</strong> by ${approver.name}.</p>
             
             <div class="detail-row">
@@ -174,7 +174,7 @@ const notifyExpenseStatusUpdate = async (
       </html>
     `;
 
-    await sendEmail(custodian.email, subject, htmlContent);
+    await sendEmail(employee.email, subject, htmlContent);
     return { success: true };
   } catch (error) {
     console.error("Notification error:", error);
@@ -183,11 +183,11 @@ const notifyExpenseStatusUpdate = async (
 };
 
 /**
- * Notify custodian when approver requests additional information
+ * Notify employee when approver requests additional information
  */
 const notifyAdditionalInfoRequested = async (
   transaction,
-  custodian,
+  employee,
   approver,
   requestMessage,
 ) => {
@@ -217,7 +217,7 @@ const notifyAdditionalInfoRequested = async (
             <p style="margin: 5px 0 0 0; opacity: 0.9;">${transaction.transactionNumber}</p>
           </div>
           <div class="content">
-            <p>Hello ${custodian.name},</p>
+            <p>Hello ${employee.name},</p>
             <p>The approver ${approver.name} has requested additional information for your expense submission:</p>
             
             <div class="detail-row">
@@ -249,7 +249,7 @@ const notifyAdditionalInfoRequested = async (
       </html>
     `;
 
-    await sendEmail(custodian.email, subject, htmlContent);
+    await sendEmail(employee.email, subject, htmlContent);
     return { success: true };
   } catch (error) {
     console.error("Notification error:", error);
@@ -345,7 +345,11 @@ const sendUserInvitation = async (user, tempPassword) => {
       </html>
     `;
 
-    await sendEmail(user.email, subject, htmlContent);
+    const result = await sendEmail(user.email, subject, htmlContent);
+    if (!result.success) {
+      console.error("Invitation email failed:", result.error);
+      return { success: false, error: result.error };
+    }
     return { success: true };
   } catch (error) {
     console.error("Invitation email error:", error);

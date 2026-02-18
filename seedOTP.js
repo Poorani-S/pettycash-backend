@@ -29,12 +29,12 @@ const seedData = async () => {
     });
     console.log("✅ Admin user created:", adminUser.email);
 
-    // Create Handler Users
+    // Create Employee Users
     const handler1 = await User.create({
-      name: "Handler One",
+      name: "Employee One",
       email: "poorani0307@gmail.com",
       phone: "+919207386562",
-      role: "handler",
+      role: "employee",
       department: "Operations",
       otpEnabled: true,
       isActive: true,
@@ -42,16 +42,16 @@ const seedData = async () => {
     });
 
     const handler2 = await User.create({
-      name: "Handler Two",
+      name: "Employee Two",
       email: "handler2@pettycash.com",
       phone: "+916369464510",
-      role: "handler",
+      role: "employee",
       department: "Marketing",
       otpEnabled: true,
       isActive: true,
       createdBy: adminUser._id,
     });
-    console.log("✅ Handler users created");
+    console.log("✅ Employee users created");
 
     // Create Categories
     const categories = await Category.insertMany([

@@ -30,6 +30,22 @@ const createSMTPTransporter = () => {
  */
 const sendEmail = async (to, subject, htmlContent) => {
   try {
+    console.log("📧 Email Config Debug:");
+    console.log("   - EMAIL_HOST:", process.env.EMAIL_HOST);
+    console.log("   - EMAIL_PORT:", process.env.EMAIL_PORT);
+    console.log(
+      "   - EMAIL_USER:",
+      process.env.EMAIL_USER ? "✓ Set" : "✗ Not Set",
+    );
+    console.log(
+      "   - EMAIL_PASSWORD:",
+      process.env.EMAIL_PASSWORD ? "✓ Set" : "✗ Not Set",
+    );
+    console.log(
+      "   - SENDGRID_API_KEY:",
+      process.env.SENDGRID_API_KEY ? "✓ Set" : "✗ Not Set",
+    );
+
     // Use SendGrid if API key is available (production)
     if (process.env.SENDGRID_API_KEY) {
       console.log("📧 Sending email via SendGrid to:", to);
@@ -57,8 +73,8 @@ const sendEmail = async (to, subject, htmlContent) => {
         html: htmlContent,
       };
 
-      await transporter.sendMail(mailOptions);
-      console.log("✅ Email sent via SMTP");
+      const info = await transporter.sendMail(mailOptions);
+      console.log("✅ Email sent via SMTP. Message ID:", info.messageId);
       return { success: true };
     }
   } catch (error) {
