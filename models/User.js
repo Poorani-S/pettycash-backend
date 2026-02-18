@@ -69,6 +69,8 @@ const userSchema = new mongoose.Schema(
       ifscCode: { type: String, trim: true, uppercase: true },
       accountHolderName: { type: String, trim: true },
       branchName: { type: String, trim: true },
+      upiId: { type: String, trim: true },
+      upiNumber: { type: String, trim: true },
     },
     // Additional user details
     panNumber: {
