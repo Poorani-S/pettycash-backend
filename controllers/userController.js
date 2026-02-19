@@ -183,15 +183,23 @@ exports.updateUser = async (req, res) => {
         `Status: ${user.isActive ? "Active" : "Inactive"} → ${isActive ? "Active" : "Inactive"}`,
       );
 
-    const updateData = {
-      name,
-      email,
-      role,
-      department,
-      phone,
-      managerId,
-      isActive,
-    };
+    const updateData = {};
+
+    if (name !== undefined) updateData.name = name;
+    if (email !== undefined) updateData.email = email;
+    if (role !== undefined) updateData.role = role;
+    if (department !== undefined) updateData.department = department;
+    if (phone !== undefined) updateData.phone = phone;
+    if (isActive !== undefined) updateData.isActive = isActive;
+
+    // Never allow empty-string ObjectId values (can cause CastError)
+    if (managerId !== undefined) {
+      if (typeof managerId === "string" && managerId.trim() === "") {
+        updateData.managerId = null;
+      } else {
+        updateData.managerId = managerId;
+      }
+    }
     if (bankDetails) updateData.bankDetails = bankDetails;
     if (panNumber) updateData.panNumber = panNumber;
     if (address) updateData.address = address;
@@ -338,6 +346,11 @@ exports.createUser = async (req, res) => {
       assignedManagerId = req.user._id;
     }
 
+    // Normalize empty/blank managerId to null to avoid ObjectId cast issues
+    if (typeof assignedManagerId === "string" && assignedManagerId.trim() === "") {
+      assignedManagerId = null;
+    }
+
     // Create user
     const user = await User.create({
       name,
@@ -353,7 +366,7 @@ exports.createUser = async (req, res) => {
       isActive: true,
       otpEnabled: true,
       createdBy: req.user._id,
-      managerId: assignedManagerId || undefined,
+      managerId: assignedManagerId ?? null,
       employeeNumber: employeeNumber || undefined,
     });
 

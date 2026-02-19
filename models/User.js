@@ -39,6 +39,7 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: [
         "admin", // System Administrator - Full access, highest authority
+        "ceo", // CEO - Top level authority (used by org hierarchy)
         "manager", // Manager - Reviews and approves employee expenses
         "employee", // Employee - Submits expenses to manager
         "intern", // Intern - Entry-level, reports to manager
@@ -56,6 +57,11 @@ const userSchema = new mongoose.Schema(
       type: mongoose.Schema.Types.ObjectId,
       ref: "User",
       default: null,
+      set: (value) => {
+        if (value === "" || value === undefined) return null;
+        if (typeof value === "string" && value.trim() === "") return null;
+        return value;
+      },
     },
     // For approvers/managers - defines approval authority limit
     approvalLimit: {
