@@ -1035,7 +1035,7 @@ exports.requestAdditionalInfo = async (req, res) => {
         .json({ success: false, message: "Transaction not found" });
     }
 
-    if (transaction.status !== "pending") {
+    if (!["pending", "pending_approval"].includes(transaction.status)) {
       return res.status(400).json({
         success: false,
         message: "Can only request information for pending transactions",

@@ -17,17 +17,6 @@ const fundTransferSchema = new mongoose.Schema(
       required: [true, "Please add transfer amount"],
       min: [0.01, "Amount must be greater than 0"],
     },
-    currency: {
-      type: String,
-      enum: ["INR", "USD", "EUR", "GBP", "AED", "SGD", "MYR"],
-      default: "INR",
-      required: true,
-    },
-    exchangeRate: {
-      type: Number,
-      default: 1, // Exchange rate to base currency (INR)
-      min: [0.01, "Exchange rate must be positive"],
-    },
     transferDate: {
       type: Date,
       required: true,

@@ -18,7 +18,6 @@ exports.addFunds = async (req, res) => {
       transferDate,
       purpose,
       clientId,
-      preserveTimestamp, // For expense-to-fund-transfer conversion
     } = req.body;
 
     // Validation
@@ -55,7 +54,7 @@ exports.addFunds = async (req, res) => {
     const transferId = `FT${year}${month}${String(count + 1).padStart(4, "0")}`;
 
     // Create fund transfer record
-    const fundTransferData = {
+    const fundTransfer = await FundTransfer.create({
       transferId,
       transferType,
       amount,
@@ -67,14 +66,7 @@ exports.addFunds = async (req, res) => {
       initiatedBy: req.user._id,
       purpose: purpose || undefined,
       recipientId: clientId || undefined,
-    };
-
-    // If converting from expense, preserve original timestamp
-    if (preserveTimestamp) {
-      fundTransferData.createdAt = new Date(preserveTimestamp);
-    }
-
-    const fundTransfer = await FundTransfer.create(fundTransferData);
+    });
 
     // Populate recipientId for response
     await fundTransfer.populate("recipientId", "name email phone bankDetails");

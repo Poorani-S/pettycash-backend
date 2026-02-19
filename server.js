@@ -55,8 +55,8 @@ app.use((req, res, next) => {
   next();
 });
 
-// Note: File serving is now protected via /api/files routes
-// app.use("/uploads", express.static(path.join(__dirname, "uploads"))); // REMOVED for security
+// Serve uploaded files statically
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
 
 // Health check endpoint
 app.get("/", (req, res) => {
@@ -86,7 +86,6 @@ app.use("/api/reports", require("./routes/reportRoutes"));
 app.use("/api/fund-transfers", require("./routes/fundTransferRoutes"));
 app.use("/api/clients", require("./routes/clientRoutes"));
 app.use("/api/user-activity", require("./routes/userActivityRoutes"));
-app.use("/api/files", require("./routes/fileRoutes")); // Protected file access
 
 // 404 handler
 app.use((req, res) => {

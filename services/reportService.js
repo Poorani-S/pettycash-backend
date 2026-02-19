@@ -1,21 +1,13 @@
 const PDFDocument = require("pdfkit");
 const ExcelJS = require("exceljs");
 const nodemailer = require("nodemailer");
-const sgMail = require("@sendgrid/mail");
 const Transaction = require("../models/Transaction");
 const User = require("../models/User");
-const Category = require("../models/Category");
 const fs = require("fs");
 const path = require("path");
 const { addPDFHeader, addPDFFooter, LOGO_PATH } = require("../utils/pdfHeader");
 
-// Configure SendGrid if API key is available (preferred for production)
-if (process.env.SENDGRID_API_KEY) {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-  console.log("✅ SendGrid configured for email sending");
-}
-
-// Email configuration with timeout settings
+// Email configuration
 const emailPort = parseInt(process.env.EMAIL_PORT) || 587;
 const transporter = nodemailer.createTransport({
   host: process.env.EMAIL_HOST || "smtp.gmail.com",
@@ -25,9 +17,6 @@ const transporter = nodemailer.createTransport({
     user: process.env.EMAIL_USER,
     pass: process.env.EMAIL_PASSWORD,
   },
-  connectionTimeout: 10000, // 10 seconds
-  greetingTimeout: 10000,
-  socketTimeout: 15000,
 });
 
 /**
@@ -363,11 +352,6 @@ const generateExcelReport = async (transactions, adminUser) => {
  */
 const sendAdminReportToCEO = async (adminUserId) => {
   try {
-    // Ensure SendGrid API key is set (in case .env was updated)
-    if (process.env.SENDGRID_API_KEY) {
-      sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-    }
-
     // Get admin user
     const adminUser = await User.findById(adminUserId);
     if (!adminUser || adminUser.role !== "admin") {
@@ -479,64 +463,28 @@ const sendAdminReportToCEO = async (adminUserId) => {
       </html>
     `;
 
-    // Prepare attachments
-    const pdfAttachment = {
-      filename: `Admin_Transaction_Report_${new Date().toISOString().split("T")[0]}.pdf`,
-      content: pdfBuffer.toString("base64"),
-      type: "application/pdf",
-      disposition: "attachment",
+    const mailOptions = {
+      from: process.env.EMAIL_FROM || "Kambaa Petty Cash <noreply@kambaa.com>",
+      to: ceoEmail,
+      subject: `Admin Transaction Report - ${reportDate} | Kambaa`,
+      html: htmlContent,
+      attachments: [
+        {
+          filename: `Admin_Transaction_Report_${new Date().toISOString().split("T")[0]}.pdf`,
+          content: pdfBuffer,
+          contentType: "application/pdf",
+        },
+        {
+          filename: `Admin_Transaction_Report_${new Date().toISOString().split("T")[0]}.xlsx`,
+          content: excelBuffer,
+          contentType:
+            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        },
+      ],
     };
 
-    const excelAttachment = {
-      filename: `Admin_Transaction_Report_${new Date().toISOString().split("T")[0]}.xlsx`,
-      content: excelBuffer.toString("base64"),
-      type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      disposition: "attachment",
-    };
-
-    // Try SendGrid first (no SMTP port blocking issues)
-    if (process.env.SENDGRID_API_KEY) {
-      console.log("📧 Sending CEO report via SendGrid...");
-      const msg = {
-        to: ceoEmail,
-        from: process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER,
-        subject: `Admin Transaction Report - ${reportDate} | Kambaa`,
-        html: htmlContent,
-        attachments: [pdfAttachment, excelAttachment],
-      };
-
-      const response = await sgMail.send(msg);
-      console.log(`✅ Admin report sent to CEO via SendGrid: ${ceoEmail}`);
-      console.log(`   Status: ${response[0].statusCode}`);
-      console.log(`   ⚠️  If email not received, check spam folder!`);
-    }
-    // Fallback to SMTP (may fail on hosting platforms that block SMTP ports)
-    else {
-      console.log("📧 Sending CEO report via SMTP...");
-      const mailOptions = {
-        from:
-          process.env.EMAIL_FROM || "Kambaa Petty Cash <noreply@kambaa.com>",
-        to: ceoEmail,
-        subject: `Admin Transaction Report - ${reportDate} | Kambaa`,
-        html: htmlContent,
-        attachments: [
-          {
-            filename: pdfAttachment.filename,
-            content: pdfBuffer,
-            contentType: "application/pdf",
-          },
-          {
-            filename: excelAttachment.filename,
-            content: excelBuffer,
-            contentType:
-              "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-          },
-        ],
-      };
-
-      await transporter.sendMail(mailOptions);
-      console.log(`✅ Admin report sent to CEO via SMTP: ${ceoEmail}`);
-    }
+    await transporter.sendMail(mailOptions);
+    console.log(`Admin report sent to CEO: ${ceoEmail}`);
 
     return {
       success: true,
@@ -545,15 +493,6 @@ const sendAdminReportToCEO = async (adminUserId) => {
     };
   } catch (error) {
     console.error("Error sending admin report to CEO:", error);
-
-    // Log more details for SendGrid errors
-    if (error.response && error.response.body) {
-      console.error(
-        "SendGrid Error Details:",
-        JSON.stringify(error.response.body, null, 2),
-      );
-    }
-
     return { success: false, error: error.message };
   }
 };

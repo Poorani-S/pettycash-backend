@@ -39,7 +39,6 @@ const userSchema = new mongoose.Schema(
       type: String,
       enum: [
         "admin", // System Administrator - Full access, highest authority
-        "ceo", // Chief Executive Officer - Highest authority, can be reported to directly
         "manager", // Manager - Reviews and approves employee expenses
         "employee", // Employee - Submits expenses to manager
         "intern", // Intern - Entry-level, reports to manager
@@ -58,11 +57,6 @@ const userSchema = new mongoose.Schema(
       ref: "User",
       default: null,
     },
-    // Flag to indicate if user reports directly to CEO
-    reportsDirectlyToCEO: {
-      type: Boolean,
-      default: false,
-    },
     // For approvers/managers - defines approval authority limit
     approvalLimit: {
       type: Number,
@@ -75,8 +69,6 @@ const userSchema = new mongoose.Schema(
       ifscCode: { type: String, trim: true, uppercase: true },
       accountHolderName: { type: String, trim: true },
       branchName: { type: String, trim: true },
-      upiId: { type: String, trim: true },
-      upiNumber: { type: String, trim: true },
     },
     // Additional user details
     panNumber: {

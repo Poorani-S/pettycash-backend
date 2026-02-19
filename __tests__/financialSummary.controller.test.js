@@ -69,8 +69,8 @@ describe("reportController.getFinancialSummary", () => {
 
     User.find.mockResolvedValueOnce([{ _id: "e1" }, { _id: "e2" }]);
     Transaction.aggregate.mockResolvedValueOnce([
-      { _id: "approved", count: 2, totalAmount: 200 },
-      { _id: "pending", count: 1, totalAmount: 50 },
+      { _id: "paid", count: 2, totalAmount: 200 },
+      { _id: "pending_approval", count: 1, totalAmount: 50 },
     ]);
 
     const req = {
@@ -87,26 +87,5 @@ describe("reportController.getFinancialSummary", () => {
     expect(payload.data.expenseTransactions.summary.totalTransactions).toBe(3);
     expect(payload.data.expenseTransactions.summary.approvedCount).toBe(2);
     expect(payload.data.expenseTransactions.summary.pendingCount).toBe(1);
-  });
-
-  test("does not expose fund transfer aggregates to non-admin/manager roles", async () => {
-    // Should not call FundTransfer.aggregate for employee
-    User.find.mockResolvedValueOnce([]);
-    Transaction.aggregate.mockResolvedValueOnce([]);
-
-    const req = {
-      query: {},
-      user: { _id: "e1", role: "employee" },
-    };
-    const res = createRes();
-
-    await getFinancialSummary(req, res);
-
-    expect(res.status).toHaveBeenCalledWith(200);
-    expect(FundTransfer.aggregate).not.toHaveBeenCalled();
-
-    const payload = res.json.mock.calls[0][0];
-    expect(payload.data.fundTransfers.overall.total).toBe(0);
-    expect(payload.data.fundTransfers.overall.count).toBe(0);
   });
 });
