@@ -1126,3 +1126,18 @@ exports.sendCEOReport = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+// @desc    Clear all transactions
+// @route   DELETE /api/transactions/clear-all
+// @access  Private (Admin only)
+exports.clearAllTransactions = async (req, res) => {
+  try {
+    const result = await Transaction.deleteMany({});
+    res.status(200).json({
+      success: true,
+      message: `All transactions cleared (${result.deletedCount} deleted)`,
+      deletedCount: result.deletedCount,
+    });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};

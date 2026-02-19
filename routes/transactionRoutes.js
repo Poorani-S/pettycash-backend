@@ -14,6 +14,7 @@ const {
   simpleRejectTransaction,
   requestAdditionalInfo,
   sendCEOReport,
+  clearAllTransactions,
 } = require("../controllers/transactionController");
 const { protect, authorize } = require("../middleware/authMiddleware");
 const {
@@ -28,6 +29,9 @@ router
 
 // CEO Report endpoint - must be before /:id routes
 router.post("/send-ceo-report", protect, authorize("admin"), sendCEOReport);
+
+// Clear all transactions - must be before /:id routes
+router.delete("/clear-all", protect, authorize("admin"), clearAllTransactions);
 
 router
   .route("/:id")
