@@ -69,8 +69,8 @@ describe("reportController.getFinancialSummary", () => {
 
     User.find.mockResolvedValueOnce([{ _id: "e1" }, { _id: "e2" }]);
     Transaction.aggregate.mockResolvedValueOnce([
-      { _id: "paid", count: 2, totalAmount: 200 },
-      { _id: "pending_approval", count: 1, totalAmount: 50 },
+      { _id: "approved", count: 2, totalAmount: 200 },
+      { _id: "pending", count: 1, totalAmount: 50 },
     ]);
 
     const req = {
