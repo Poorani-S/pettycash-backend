@@ -207,7 +207,9 @@ exports.updateUser = async (req, res) => {
     user = await User.findByIdAndUpdate(req.params.id, updateData, {
       new: true,
       runValidators: true,
-    }).select("-password");
+    })
+      .select("-password")
+      .populate("managerId", "name email role");
 
     // Log the update activity
     if (changes.length > 0) {
@@ -354,12 +356,16 @@ exports.createUser = async (req, res) => {
       assignedManagerId = null;
     }
 
+    // Generate a secure random password if not provided
+    const userPassword =
+      password || `Pettycash@${Math.random().toString(36).slice(-8)}`;
+
     // Create user
     const user = await User.create({
       name,
       email,
       phone,
-      password: password || undefined,
+      password: userPassword,
       role: role || "employee",
       department,
       approvalLimit: role === "approver" ? approvalLimit : null,
@@ -379,11 +385,11 @@ exports.createUser = async (req, res) => {
       changes: ["User account created"],
     });
 
-    // Send invitation email with OTP setup instructions
+    // Send invitation email with password
     let emailSent = false;
     let emailError = null;
     try {
-      const emailResult = await sendUserInvitation(user, password);
+      const emailResult = await sendUserInvitation(user, userPassword);
       emailSent = emailResult.success;
       if (!emailResult.success) {
         emailError = emailResult.error;
@@ -472,8 +478,15 @@ exports.resendInvitation = async (req, res) => {
 
     console.log("Calling sendUserInvitation for:", user.email);
 
-    // Send invitation email (no password needed for OTP-based auth)
-    const emailResult = await sendUserInvitation(user, null);
+    // Generate a new password for resend
+    const newPassword = `Pettycash@${Math.random().toString(36).slice(-8)}`;
+
+    // Update user password
+    user.password = newPassword;
+    await user.save();
+
+    // Send invitation email with new password
+    const emailResult = await sendUserInvitation(user, newPassword);
 
     console.log("Email result:", emailResult);
 
@@ -481,7 +494,10 @@ exports.resendInvitation = async (req, res) => {
       console.log("✅ Email sent successfully");
       res.status(200).json({
         success: true,
-        message: "Invitation email sent successfully to " + user.email,
+        message:
+          "Invitation email sent successfully to " +
+          user.email +
+          " with new password",
       });
     } else {
       console.error("❌ Email send failed:", emailResult.error);
