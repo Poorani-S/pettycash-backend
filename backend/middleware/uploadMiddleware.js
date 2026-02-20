@@ -39,21 +39,36 @@ const storage = multer.diskStorage({
   },
 });
 
-// File filter to accept only images
+// File filter to accept multiple file types
 const fileFilter = (req, file, cb) => {
-  // Accept images only
-  const allowedTypes = /jpeg|jpg|png|gif|pdf/;
+  // Accept images, PDFs, and common document formats
+  const allowedTypes = /jpeg|jpg|png|gif|pdf|doc|docx|xls|xlsx|txt/;
   const extname = allowedTypes.test(
     path.extname(file.originalname).toLowerCase(),
   );
-  const mimetype = allowedTypes.test(file.mimetype);
+
+  // Check MIME types
+  const allowedMimeTypes = [
+    "image/jpeg",
+    "image/jpg",
+    "image/png",
+    "image/gif",
+    "application/pdf",
+    "application/msword", // .doc
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document", // .docx
+    "application/vnd.ms-excel", // .xls
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet", // .xlsx
+    "text/plain", // .txt
+  ];
+
+  const mimetype = allowedMimeTypes.includes(file.mimetype);
 
   if (mimetype && extname) {
     return cb(null, true);
   } else {
     cb(
       new Error(
-        "Invalid file type. Only JPEG, PNG, GIF, and PDF files are allowed.",
+        "Invalid file type. Supported formats: JPEG, PNG, GIF, PDF, DOC, DOCX, XLS, XLSX, TXT",
       ),
     );
   }

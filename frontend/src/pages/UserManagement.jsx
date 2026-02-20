@@ -155,6 +155,33 @@ function UserManagement() {
       if (editingUser) {
         await axios.put(`/users/${editingUser._id}`, payload);
         setSuccess("User updated successfully!");
+        toast.success("User updated successfully!");
+
+        // Close modal and reset form first
+        setShowAddModal(false);
+        setEditingUser(null);
+        setFormData({
+          name: "",
+          email: "",
+          phone: "",
+          password: "",
+          role: "employee",
+          managerId: "",
+          department: "",
+          employeeNumber: "",
+          approvalLimit: "",
+          bankDetails: {
+            bankName: "",
+            accountNumber: "",
+            ifscCode: "",
+            branchName: "",
+          },
+          panNumber: "",
+          address: "",
+        });
+
+        // Fetch updated user list
+        await fetchUsers();
       } else {
         const response = await axios.post("/users", payload);
         if (response.data.emailSent) {
@@ -162,37 +189,40 @@ function UserManagement() {
             "User created successfully! Invitation email sent to " +
               formData.email,
           );
+          toast.success(`User created! Invitation sent to ${formData.email}`);
         } else {
           setError(
             "User created but invitation email failed to send. Error: " +
               (response.data.emailError || "Check email configuration"),
           );
           setSuccess("User account created for " + formData.email);
+          toast.warning("User created but email failed to send");
         }
-      }
 
-      setShowAddModal(false);
-      setEditingUser(null);
-      setFormData({
-        name: "",
-        email: "",
-        phone: "",
-        password: "",
-        role: "employee",
-        managerId: "",
-        department: "",
-        employeeNumber: "",
-        approvalLimit: "",
-        bankDetails: {
-          bankName: "",
-          accountNumber: "",
-          ifscCode: "",
-          branchName: "",
-        },
-        panNumber: "",
-        address: "",
-      });
-      fetchUsers();
+        setShowAddModal(false);
+        setEditingUser(null);
+        setFormData({
+          name: "",
+          email: "",
+          phone: "",
+          password: "",
+          role: "employee",
+          managerId: "",
+          department: "",
+          employeeNumber: "",
+          approvalLimit: "",
+          bankDetails: {
+            bankName: "",
+            accountNumber: "",
+            ifscCode: "",
+            branchName: "",
+          },
+          panNumber: "",
+          address: "",
+        });
+
+        await fetchUsers();
+      }
 
       // Trigger custom event to notify other components about user list changes
       window.dispatchEvent(
@@ -618,28 +648,6 @@ function UserManagement() {
           </svg>
           Activity History
         </button>
-        {activeTab === "history" && (
-          <button
-            onClick={exportActivityPDF}
-            disabled={loadingActivity}
-            className="ml-auto flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-green-500 to-green-600 text-white rounded-xl font-bold hover:shadow-lg transition-all duration-300 disabled:opacity-50"
-          >
-            <svg
-              className="w-5 h-5"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
-              />
-            </svg>
-            Export PDF
-          </button>
-        )}
       </div>
 
       {/* Activity History */}
@@ -1247,18 +1255,10 @@ function UserManagement() {
                       className="w-full px-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0077b6] focus:border-[#0077b6] transition-all"
                       required
                     >
-                      <option value="employee">
-                        👤 Employee (Submit expenses)
-                      </option>
-                      <option value="intern">🎓 Intern (Entry-level)</option>
-                      <option value="manager">
-                        📋 Manager (Manage team & approve)
-                      </option>
-                      <option value="approver">
-                        ✅ Approver (Review & approve)
-                      </option>
-                      <option value="admin">👑 Admin (Full access)</option>
-                      <option value="auditor">👁️ Auditor (Read-only)</option>
+                      <option value="admin">👑 Admin</option>
+                      <option value="manager">📋 Manager</option>
+                      <option value="employee">👤 Employee</option>
+                      <option value="intern">🎓 Intern</option>
                     </select>
                   </div>
 

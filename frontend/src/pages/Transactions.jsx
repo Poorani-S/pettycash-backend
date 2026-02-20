@@ -114,6 +114,24 @@ const Transactions = () => {
     }
   };
 
+  const handleClearAll = async () => {
+    if (
+      !window.confirm(
+        "Are you sure you want to DELETE ALL transactions? This action cannot be undone.",
+      )
+    )
+      return;
+    try {
+      const res = await axios.delete("/transactions/clear-all");
+      setTransactions([]);
+      await fetchFinancialSummary();
+      window.dispatchEvent(new CustomEvent("transactionsUpdated"));
+      alert(res.data.message || "All transactions cleared.");
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to clear transactions.");
+    }
+  };
+
   const handleReject = async (id) => {
     const comment = window.prompt("Enter rejection reason:");
     if (!comment) return;
@@ -193,45 +211,68 @@ const Transactions = () => {
   return (
     <Layout>
       {/* Page Header */}
-      <div className="mb-8 animate-slideInUp">
-        <div className="flex items-center justify-between mb-6">
-          <div>
-            <h1 className="text-4xl font-bold bg-gradient-to-r from-[#023e8a] to-[#0077b6] bg-clip-text text-transparent mb-2">
+      <div className="mb-6 md:mb-8 animate-slideInUp">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between gap-4 mb-6">
+          <div className="flex-1 min-w-0">
+            <h1 className="text-2xl sm:text-3xl md:text-4xl font-bold bg-gradient-to-r from-[#023e8a] to-[#0077b6] bg-clip-text text-transparent mb-2">
               Transaction Management
             </h1>
-            <p className="text-gray-600 text-lg">
+            <p className="text-gray-600 text-sm sm:text-base md:text-lg">
               View, manage and track all expense transactions
             </p>
           </div>
-          <button
-            onClick={() => navigate("/transactions/new")}
-            className="px-6 py-3 bg-gradient-to-r from-[#023e8a] to-[#0077b6] text-white rounded-xl hover:shadow-lg transition-all duration-300 flex items-center gap-2 group shadow-md"
-          >
-            <svg
-              className="w-5 h-5 group-hover:rotate-90 transition-transform duration-300"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
+            {user?.role === "admin" && (
+              <button
+                onClick={handleClearAll}
+                className="flex-1 sm:flex-none px-3 sm:px-5 py-2 sm:py-3 bg-red-600 hover:bg-red-700 text-white rounded-xl transition-all duration-300 flex items-center justify-center gap-2 shadow-md font-semibold text-sm sm:text-base"
+              >
+                <svg
+                  className="w-4 h-4 sm:w-5 sm:h-5"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+                <span className="hidden sm:inline">Clear All</span>
+                <span className="sm:hidden">Clear</span>
+              </button>
+            )}
+            <button
+              onClick={() => navigate("/transactions/new")}
+              className="flex-1 sm:flex-none px-4 sm:px-6 py-2 sm:py-3 bg-gradient-to-r from-[#023e8a] to-[#0077b6] text-white rounded-xl hover:shadow-lg transition-all duration-300 flex items-center justify-center gap-2 group shadow-md text-sm sm:text-base"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M12 4v16m8-8H4"
-              />
-            </svg>
-            <span className="font-semibold hidden sm:inline">New Expense</span>
-            <span className="font-semibold sm:hidden">New</span>
-          </button>
+              <svg
+                className="w-4 h-4 sm:w-5 sm:h-5 group-hover:rotate-90 transition-transform duration-300"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M12 4v16m8-8H4"
+                />
+              </svg>
+              <span className="font-semibold">New</span>
+            </button>
+          </div>
         </div>
       </div>
 
       {/* Statistics Cards */}
-      <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-6 mb-6 sm:mb-8">
-        <div className="bg-white rounded-2xl p-6 shadow-soft hover:shadow-hover transition-all duration-300 card-hover animate-slideInLeft border-l-4 border-blue-500">
+      <div className="grid grid-cols-2 lg:grid-cols-5 gap-3 sm:gap-4 md:gap-6 mb-6 sm:mb-8">
+        <div className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-soft hover:shadow-hover transition-all duration-300 card-hover animate-slideInLeft border-l-4 border-blue-500">
           <div className="flex items-center justify-between mb-2">
             <svg
-              className="w-10 h-10 text-blue-500"
+              className="w-8 h-8 sm:w-10 sm:h-10 text-blue-500"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -244,19 +285,25 @@ const Transactions = () => {
               />
             </svg>
           </div>
-          <p className="text-gray-600 text-sm font-semibold mb-1">
+          <p className="text-gray-600 text-xs sm:text-sm font-semibold mb-1">
             Total Transactions
           </p>
-          <p className="text-3xl font-bold text-gray-800">{stats.total}</p>
+          <p className="text-2xl sm:text-3xl font-bold text-gray-800">
+            {stats.total}
+          </p>
         </div>
 
         <div
-          className="bg-white rounded-2xl p-6 shadow-soft hover:shadow-hover transition-all duration-300 card-hover animate-slideInLeft border-l-4 border-yellow-500"
+          className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-soft hover:shadow-hover transition-all duration-300 card-hover animate-slideInLeft border-l-4 border-yellow-500"
+          style={{ animationDelay: "50ms" }}
+        >
+        <div
+          className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-soft hover:shadow-hover transition-all duration-300 card-hover animate-slideInLeft border-l-4 border-yellow-500"
           style={{ animationDelay: "50ms" }}
         >
           <div className="flex items-center justify-between mb-2">
             <svg
-              className="w-10 h-10 text-yellow-500"
+              className="w-8 h-8 sm:w-10 sm:h-10 text-yellow-500"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -269,17 +316,17 @@ const Transactions = () => {
               />
             </svg>
           </div>
-          <p className="text-gray-600 text-sm font-semibold mb-1">Pending</p>
-          <p className="text-3xl font-bold text-gray-800">{stats.pending}</p>
+          <p className="text-gray-600 text-xs sm:text-sm font-semibold mb-1">Pending</p>
+          <p className="text-2xl sm:text-3xl font-bold text-gray-800">{stats.pending}</p>
         </div>
 
         <div
-          className="bg-white rounded-2xl p-6 shadow-soft hover:shadow-hover transition-all duration-300 card-hover animate-slideInLeft border-l-4 border-green-500"
+          className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-soft hover:shadow-hover transition-all duration-300 card-hover animate-slideInLeft border-l-4 border-green-500"
           style={{ animationDelay: "100ms" }}
         >
           <div className="flex items-center justify-between mb-2">
             <svg
-              className="w-10 h-10 text-green-500"
+              className="w-8 h-8 sm:w-10 sm:h-10 text-green-500"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -292,17 +339,17 @@ const Transactions = () => {
               />
             </svg>
           </div>
-          <p className="text-gray-600 text-sm font-semibold mb-1">Approved</p>
-          <p className="text-3xl font-bold text-gray-800">{stats.approved}</p>
+          <p className="text-gray-600 text-xs sm:text-sm font-semibold mb-1">Approved</p>
+          <p className="text-2xl sm:text-3xl font-bold text-gray-800">{stats.approved}</p>
         </div>
 
         <div
-          className="bg-white rounded-2xl p-6 shadow-soft hover:shadow-hover transition-all duration-300 card-hover animate-slideInLeft border-l-4 border-red-500"
+          className="bg-white rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-soft hover:shadow-hover transition-all duration-300 card-hover animate-slideInLeft border-l-4 border-red-500"
           style={{ animationDelay: "150ms" }}
         >
           <div className="flex items-center justify-between mb-2">
             <svg
-              className="w-10 h-10 text-red-500"
+              className="w-8 h-8 sm:w-10 sm:h-10 text-red-500"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -315,17 +362,17 @@ const Transactions = () => {
               />
             </svg>
           </div>
-          <p className="text-gray-600 text-sm font-semibold mb-1">Rejected</p>
-          <p className="text-3xl font-bold text-gray-800">{stats.rejected}</p>
+          <p className="text-gray-600 text-xs sm:text-sm font-semibold mb-1">Rejected</p>
+          <p className="text-2xl sm:text-3xl font-bold text-gray-800">{stats.rejected}</p>
         </div>
 
         <div
-          className="bg-gradient-to-br from-[#023e8a] to-[#0077b6] rounded-2xl p-6 shadow-soft hover:shadow-hover transition-all duration-300 card-hover animate-slideInLeft text-white border-l-4 border-white"
+          className="bg-gradient-to-br from-[#023e8a] to-[#0077b6] rounded-xl sm:rounded-2xl p-4 sm:p-6 shadow-soft hover:shadow-hover transition-all duration-300 card-hover animate-slideInLeft text-white border-l-4 border-white col-span-2 lg:col-span-1"
           style={{ animationDelay: "200ms" }}
         >
           <div className="flex items-center justify-between mb-2">
             <svg
-              className="w-10 h-10"
+              className="w-8 h-8 sm:w-10 sm:h-10"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -338,10 +385,10 @@ const Transactions = () => {
               />
             </svg>
           </div>
-          <p className="text-blue-100 text-sm font-semibold mb-1">
+          <p className="text-blue-100 text-xs sm:text-sm font-semibold mb-1">
             Total Amount
           </p>
-          <p className="text-3xl font-bold">
+          <p className="text-2xl sm:text-3xl font-bold">
             ₹{stats.totalAmount.toLocaleString()}
           </p>
         </div>
@@ -349,16 +396,16 @@ const Transactions = () => {
 
       {/* Filters and Search */}
       <div
-        className="bg-white rounded-2xl shadow-soft p-6 mb-8 animate-slideInUp"
+        className="bg-white rounded-xl sm:rounded-2xl shadow-soft p-4 sm:p-6 mb-6 sm:mb-8 animate-slideInUp"
         style={{ animationDelay: "250ms" }}
       >
-        <div className="flex flex-col md:flex-row gap-4 items-center justify-between">
+        <div className="flex flex-col gap-4">
           <div className="flex flex-wrap gap-2">
             {["all", "pending", "approved", "rejected"].map((f) => (
               <button
                 key={f}
                 onClick={() => setFilter(f)}
-                className={`px-5 py-2.5 rounded-xl font-semibold transition-all duration-300 flex items-center gap-2 ${
+                className={`px-3 sm:px-5 py-2 sm:py-2.5 rounded-xl font-semibold transition-all duration-300 flex items-center gap-2 text-sm sm:text-base ${
                   filter === f
                     ? "bg-gradient-to-r from-[#023e8a] to-[#0077b6] text-white shadow-md scale-105"
                     : "bg-gray-100 text-gray-700 hover:bg-gray-200"
@@ -366,7 +413,7 @@ const Transactions = () => {
               >
                 {f === "all" && (
                   <svg
-                    className="w-4 h-4"
+                    className="w-3 h-3 sm:w-4 sm:h-4"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -381,7 +428,7 @@ const Transactions = () => {
                 )}
                 {f === "pending" && (
                   <svg
-                    className="w-4 h-4"
+                    className="w-3 h-3 sm:w-4 sm:h-4"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -396,7 +443,7 @@ const Transactions = () => {
                 )}
                 {f === "approved" && (
                   <svg
-                    className="w-4 h-4"
+                    className="w-3 h-3 sm:w-4 sm:h-4"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -411,7 +458,7 @@ const Transactions = () => {
                 )}
                 {f === "rejected" && (
                   <svg
-                    className="w-4 h-4"
+                    className="w-3 h-3 sm:w-4 sm:h-4"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -429,9 +476,9 @@ const Transactions = () => {
             ))}
           </div>
 
-          <div className="relative w-full md:w-96">
+          <div className="relative w-full">
             <svg
-              className="absolute left-4 top-1/2 transform -translate-y-1/2 w-5 h-5 text-gray-400"
+              className="absolute left-3 sm:left-4 top-1/2 transform -translate-y-1/2 w-4 h-4 sm:w-5 sm:h-5 text-gray-400"
               fill="none"
               stroke="currentColor"
               viewBox="0 0 24 24"
@@ -448,7 +495,7 @@ const Transactions = () => {
               placeholder="Search by payee, purpose, or category..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-12 pr-4 py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0077b6] focus:border-[#0077b6] transition-all duration-300"
+              className="w-full pl-10 sm:pl-12 pr-4 py-2.5 sm:py-3 border-2 border-gray-200 rounded-xl focus:ring-2 focus:ring-[#0077b6] focus:border-[#0077b6] transition-all duration-300 text-sm sm:text-base"
             />
           </div>
         </div>
@@ -456,9 +503,9 @@ const Transactions = () => {
 
       {/* Transactions List */}
       {loading ? (
-        <div className="bg-white rounded-2xl shadow-soft p-12 text-center animate-fadeIn">
-          <div className="w-16 h-16 border-4 border-[#0077b6] border-t-transparent rounded-full animate-spin mx-auto"></div>
-          <p className="text-gray-600 font-semibold mt-4 text-lg">
+        <div className="bg-white rounded-xl sm:rounded-2xl shadow-soft p-8 sm:p-12 text-center animate-fadeIn">
+          <div className="w-12 h-12 sm:w-16 sm:h-16 border-4 border-[#0077b6] border-t-transparent rounded-full animate-spin mx-auto"></div>
+          <p className="text-gray-600 font-semibold mt-4 text-base sm:text-lg">
             Loading transactions...
           </p>
         </div>
@@ -498,14 +545,14 @@ const Transactions = () => {
             <div
               key={transaction._id}
               style={{ animationDelay: `${index * 50}ms` }}
-              className="bg-white rounded-2xl shadow-soft p-6 hover:shadow-hover transition-all duration-300 card-hover animate-slideInRight border-l-4 border-transparent hover:border-[#0077b6]"
+              className="bg-white rounded-xl sm:rounded-2xl shadow-soft p-4 sm:p-6 hover:shadow-hover transition-all duration-300 card-hover animate-slideInRight border-l-4 border-transparent hover:border-[#0077b6]"
             >
               <div className="flex flex-col lg:flex-row lg:items-start justify-between gap-4 mb-4">
-                <div className="flex-1">
-                  <div className="flex flex-wrap items-center gap-3 mb-3">
-                    <div className="flex items-center gap-2 bg-gradient-to-r from-[#023e8a]/10 to-[#0077b6]/10 px-4 py-2 rounded-xl">
+                <div className="flex-1 min-w-0">
+                  <div className="flex flex-wrap items-center gap-2 sm:gap-3 mb-3">
+                    <div className="flex items-center gap-2 bg-gradient-to-r from-[#023e8a]/10 to-[#0077b6]/10 px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl">
                       <svg
-                        className="w-5 h-5 text-[#0077b6]"
+                        className="w-4 h-4 sm:w-5 sm:h-5 text-[#0077b6] flex-shrink-0"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -517,16 +564,16 @@ const Transactions = () => {
                           d="M7 7h.01M7 3h5c.512 0 1.024.195 1.414.586l7 7a2 2 0 010 2.828l-7 7a2 2 0 01-2.828 0l-7-7A1.994 1.994 0 013 12V7a4 4 0 014-4z"
                         />
                       </svg>
-                      <span className="font-bold text-[#023e8a]">
+                      <span className="font-bold text-[#023e8a] text-xs sm:text-sm truncate">
                         {transaction.category?.name}
                       </span>
                     </div>
                     <span
-                      className={`px-4 py-2 rounded-xl text-sm font-bold shadow-sm flex items-center gap-2 ${getStatusBadge(transaction.status)}`}
+                      className={`px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold shadow-sm flex items-center gap-2 ${getStatusBadge(transaction.status)}`}
                     >
                       {transaction.status === "approved" && (
                         <svg
-                          className="w-4 h-4"
+                          className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -541,7 +588,7 @@ const Transactions = () => {
                       )}
                       {transaction.status === "pending" && (
                         <svg
-                          className="w-4 h-4"
+                          className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -556,7 +603,7 @@ const Transactions = () => {
                       )}
                       {transaction.status === "rejected" && (
                         <svg
-                          className="w-4 h-4"
+                          className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -572,9 +619,9 @@ const Transactions = () => {
                       {(transaction.status || "pending").toUpperCase()}
                     </span>
                     {transaction.hasGSTInvoice && (
-                      <span className="px-4 py-2 rounded-xl text-sm font-bold bg-blue-100 text-blue-700 flex items-center gap-2">
+                      <span className="px-3 sm:px-4 py-1.5 sm:py-2 rounded-xl text-xs sm:text-sm font-bold bg-blue-100 text-blue-700 flex items-center gap-2">
                         <svg
-                          className="w-4 h-4"
+                          className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0"
                           fill="none"
                           stroke="currentColor"
                           viewBox="0 0 24 24"
@@ -586,17 +633,17 @@ const Transactions = () => {
                             d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"
                           />
                         </svg>
-                        GST Invoice
+                        GST
                       </span>
                     )}
                   </div>
-                  <p className="text-gray-800 font-semibold mb-2 text-lg">
+                  <p className="text-gray-800 font-semibold mb-2 text-base sm:text-lg">
                     {transaction.purpose}
                   </p>
-                  <div className="flex flex-wrap items-center gap-4 text-sm text-gray-600">
+                  <div className="flex flex-col sm:flex-row sm:flex-wrap items-start sm:items-center gap-2 sm:gap-4 text-xs sm:text-sm text-gray-600">
                     <span className="flex items-center gap-2">
                       <svg
-                        className="w-4 h-4"
+                        className="w-4 h-4 flex-shrink-0"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -608,11 +655,11 @@ const Transactions = () => {
                           d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                         />
                       </svg>
-                      {transaction.payeeClientName}
+                      <span className="truncate">{transaction.payeeClientName}</span>
                     </span>
                     <span className="flex items-center gap-2">
                       <svg
-                        className="w-4 h-4"
+                        className="w-4 h-4 flex-shrink-0"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -632,7 +679,7 @@ const Transactions = () => {
                     </span>
                     <span className="flex items-center gap-2">
                       <svg
-                        className="w-4 h-4"
+                        className="w-4 h-4 flex-shrink-0"
                         fill="none"
                         stroke="currentColor"
                         viewBox="0 0 24 24"
@@ -650,15 +697,15 @@ const Transactions = () => {
                     </span>
                   </div>
                 </div>
-                <div className="text-right lg:text-right">
-                  <p className="text-3xl font-bold text-[#023e8a]">
+                <div className="text-left sm:text-right lg:text-right">
+                  <p className="text-2xl sm:text-3xl font-bold text-[#023e8a]">
                     ₹
                     {formatAmount(
                       transaction.postTaxAmount ?? transaction.amount,
                     )}
                   </p>
                   {Number(transaction.taxAmount) > 0 && (
-                    <p className="text-sm text-gray-500 mt-1">
+                    <p className="text-xs sm:text-sm text-gray-500 mt-1">
                       Tax: ₹{formatAmount(transaction.taxAmount)}
                     </p>
                   )}
@@ -666,10 +713,10 @@ const Transactions = () => {
               </div>
 
               {/* Footer Actions */}
-              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-gray-100 gap-4">
-                <p className="text-sm text-gray-500 flex items-center gap-2">
+              <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-4 border-t border-gray-100 gap-3 sm:gap-4">
+                <p className="text-xs sm:text-sm text-gray-500 flex items-center gap-2">
                   <svg
-                    className="w-4 h-4"
+                    className="w-3 h-3 sm:w-4 sm:h-4 flex-shrink-0"
                     fill="none"
                     stroke="currentColor"
                     viewBox="0 0 24 24"
@@ -681,23 +728,25 @@ const Transactions = () => {
                       d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z"
                     />
                   </svg>
-                  Submitted by{" "}
-                  <span className="font-semibold">
-                    {transaction.submittedBy?.name}
-                  </span>{" "}
-                  on {formatDate(transaction.createdAt)}
+                  <span className="truncate">
+                    Submitted by{" "}
+                    <span className="font-semibold">
+                      {transaction.submittedBy?.name}
+                    </span>{" "}
+                    on {formatDate(transaction.createdAt)}
+                  </span>
                 </p>
 
-                <div className="flex items-center gap-3">
+                <div className="flex items-center gap-2 sm:gap-3 w-full sm:w-auto">
                   {user?.role === "admin" &&
                     isPendingLike(transaction.status) && (
                       <>
                         <button
                           onClick={() => handleReject(transaction._id)}
-                          className="px-5 py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 shadow-md hover:shadow-lg"
+                          className="flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 bg-red-500 hover:bg-red-600 text-white rounded-xl text-xs sm:text-sm font-bold transition-all duration-300 flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
                         >
                           <svg
-                            className="w-4 h-4"
+                            className="w-3 h-3 sm:w-4 sm:h-4"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"
@@ -713,10 +762,10 @@ const Transactions = () => {
                         </button>
                         <button
                           onClick={() => handleApprove(transaction._id)}
-                          className="px-5 py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-xl text-sm font-bold transition-all duration-300 flex items-center gap-2 shadow-md hover:shadow-lg"
+                          className="flex-1 sm:flex-none px-4 sm:px-5 py-2 sm:py-2.5 bg-green-500 hover:bg-green-600 text-white rounded-xl text-xs sm:text-sm font-bold transition-all duration-300 flex items-center justify-center gap-2 shadow-md hover:shadow-lg"
                         >
                           <svg
-                            className="w-4 h-4"
+                            className="w-3 h-3 sm:w-4 sm:h-4"
                             fill="none"
                             stroke="currentColor"
                             viewBox="0 0 24 24"

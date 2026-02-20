@@ -280,6 +280,7 @@ const sendUserInvitation = async (user, tempPassword) => {
           .step-number { position: absolute; left: 0; top: 0; background: #0077b6; color: white; width: 24px; height: 24px; border-radius: 50%; text-align: center; line-height: 24px; font-weight: bold; }
           .button { display: inline-block; padding: 12px 30px; background: #0077b6; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
           .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
+          .important-box { background: #fef3c7; border: 2px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 10px; }
         </style>
       </head>
       <body>
@@ -296,6 +297,17 @@ const sendUserInvitation = async (user, tempPassword) => {
               <h3 style="margin-top: 0; color: #023e8a;">Your Login Credentials</h3>
               <p><strong>Email:</strong></p>
               <div class="credential">${user.email}</div>
+              ${
+                tempPassword
+                  ? `
+              <p><strong>Password:</strong></p>
+              <div class="credential">${tempPassword}</div>
+              <div class="important-box">
+                <strong>⚠️ Important:</strong> Please keep your password secure and consider changing it after your first login.
+              </div>
+              `
+                  : ""
+              }
               <p><strong>Role:</strong> ${user.role.toUpperCase()}</p>
               ${user.approvalLimit ? `<p><strong>Approval Limit:</strong> ₹${user.approvalLimit.toLocaleString()}</p>` : ""}
             </div>
@@ -312,6 +324,16 @@ const sendUserInvitation = async (user, tempPassword) => {
                 <strong>Enter Your Email</strong>
                 <p>Use the email address shown above</p>
               </div>
+              ${
+                tempPassword
+                  ? `
+              <div class="step">
+                <span class="step-number">3</span>
+                <strong>Login with Password or OTP</strong>
+                <p>You can login using the password provided above, or click "Send OTP" to receive a one-time password via email for enhanced security</p>
+              </div>
+              `
+                  : `
               <div class="step">
                 <span class="step-number">3</span>
                 <strong>Request OTP</strong>
@@ -322,9 +344,11 @@ const sendUserInvitation = async (user, tempPassword) => {
                 <strong>Enter OTP</strong>
                 <p>Check your email for the 6-digit code and enter it to login</p>
               </div>
+              `
+              }
             </div>
             
-            <p><strong>Note:</strong> This system uses OTP-based authentication for enhanced security. You will receive a new OTP each time you login.</p>
+            <p><strong>Note:</strong> This system supports both password and OTP-based authentication for enhanced security. ${tempPassword ? "You can use either method to login." : "You will receive a new OTP each time you login."}</p>
             
             <div style="text-align: center;">
               <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/login" class="button">

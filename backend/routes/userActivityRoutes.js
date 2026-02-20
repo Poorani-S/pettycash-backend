@@ -217,6 +217,36 @@ router.get("/export/pdf", protect, authorize("admin"), async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 });
+// @desc    Clear all activity logs
+// @route   DELETE /api/user-activity/clear-all
+// @access  Private (Admin only)
+router.delete("/clear-all", protect, authorize("admin"), async (req, res) => {
+  try {
+    await UserActivityLog.deleteMany({});
+    res
+      .status(200)
+      .json({ success: true, message: "All activity logs cleared" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
+
+// @desc    Delete a single activity log entry
+// @route   DELETE /api/user-activity/:id
+// @access  Private (Admin only)
+router.delete("/:id", protect, authorize("admin"), async (req, res) => {
+  try {
+    const log = await UserActivityLog.findByIdAndDelete(req.params.id);
+    if (!log) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Activity log not found" });
+    }
+    res.status(200).json({ success: true, message: "Activity log deleted" });
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+});
 
 // Helper function to log user activity (exported for use in other controllers)
 const logUserActivity = async (

@@ -237,12 +237,18 @@ exports.createTransaction = async (req, res) => {
       ? formatFileUrl(req.files.paymentProofImage[0].path)
       : undefined;
 
+    // Parse numeric values properly to avoid floating-point precision issues
+    const parseAmount = (value) => {
+      if (!value) return null;
+      return parseFloat(parseFloat(value).toFixed(2));
+    };
+
     // Create transaction with proper field mapping
     const transaction = await Transaction.create({
       transactionNumber,
       title: purpose || title,
       description: purpose || description,
-      amount: postTaxAmount || amount,
+      amount: parseAmount(postTaxAmount || amount),
       category,
       transactionDate: transactionDate || Date.now(),
       paymentMethod: paymentMode || paymentMethod,
@@ -256,9 +262,9 @@ exports.createTransaction = async (req, res) => {
       invoiceDate,
       payeeClientName,
       purpose,
-      preTaxAmount,
-      taxAmount: taxAmount || 0,
-      postTaxAmount,
+      preTaxAmount: parseAmount(preTaxAmount),
+      taxAmount: parseAmount(taxAmount) || 0,
+      postTaxAmount: parseAmount(postTaxAmount),
       paymentDate,
       invoiceImage,
       paymentProofImage,
@@ -408,11 +414,17 @@ exports.updateTransaction = async (req, res) => {
       paymentMode,
     } = req.body;
 
+    // Parse numeric values properly to avoid floating-point precision issues
+    const parseAmount = (value) => {
+      if (!value) return null;
+      return parseFloat(parseFloat(value).toFixed(2));
+    };
+
     // Handle file uploads if any
     const updateData = {
       title: purpose || title,
       description: purpose || description,
-      amount: postTaxAmount || amount,
+      amount: parseAmount(postTaxAmount || amount),
       category,
       transactionDate,
       paymentMethod: paymentMode || paymentMethod,
@@ -420,9 +432,9 @@ exports.updateTransaction = async (req, res) => {
       receiptNumber,
       notes,
       purpose,
-      preTaxAmount,
-      taxAmount,
-      postTaxAmount,
+      preTaxAmount: parseAmount(preTaxAmount),
+      taxAmount: parseAmount(taxAmount),
+      postTaxAmount: parseAmount(postTaxAmount),
       hasGSTInvoice,
       invoiceDate,
       payeeClientName,
@@ -1122,6 +1134,21 @@ exports.sendCEOReport = async (req, res) => {
         message: result.message || result.error,
       });
     }
+  } catch (error) {
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+// @desc    Clear all transactions
+// @route   DELETE /api/transactions/clear-all
+// @access  Private (Admin only)
+exports.clearAllTransactions = async (req, res) => {
+  try {
+    const result = await Transaction.deleteMany({});
+    res.status(200).json({
+      success: true,
+      message: `All transactions cleared (${result.deletedCount} deleted)`,
+      deletedCount: result.deletedCount,
+    });
   } catch (error) {
     res.status(500).json({ success: false, message: error.message });
   }

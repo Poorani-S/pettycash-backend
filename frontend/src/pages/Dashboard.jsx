@@ -42,6 +42,28 @@ function Dashboard() {
     };
   }, [navigate]);
 
+  const handleClearAllData = async () => {
+    if (
+      !window.confirm(
+        "Are you sure you want to permanently delete ALL transactions and fund transfers? This cannot be undone.",
+      )
+    )
+      return;
+    try {
+      await axios.delete("/transactions/clear-all");
+      setRecentTransactions([]);
+      setStats({
+        totalExpenses: 0,
+        pendingCount: 0,
+        approvedCount: 0,
+        currentBalance: 0,
+      });
+      window.dispatchEvent(new Event("transactionsUpdated"));
+    } catch (err) {
+      alert(err.response?.data?.message || "Failed to clear data");
+    }
+  };
+
   const fetchDashboardData = async () => {
     try {
       setLoading(true);
@@ -291,26 +313,49 @@ function Dashboard() {
               Your latest transactions at a glance
             </p>
           </div>
-          <button
-            onClick={() => navigate("/transactions")}
-            className="px-3 sm:px-4 py-2 bg-gradient-to-r from-[#023e8a] to-[#0077b6] text-white rounded-lg sm:rounded-xl hover:shadow-lg transition-all duration-300 flex items-center gap-1 sm:gap-2 group text-sm sm:text-base"
-          >
-            <span className="font-semibold hidden sm:inline">View All</span>
-            <span className="font-semibold sm:hidden">All</span>
-            <svg
-              className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform"
-              fill="none"
-              stroke="currentColor"
-              viewBox="0 0 24 24"
+          <div className="flex items-center gap-2">
+            {user?.role === "admin" && (
+              <button
+                onClick={handleClearAllData}
+                className="px-3 sm:px-4 py-2 bg-red-600 hover:bg-red-700 text-white rounded-lg sm:rounded-xl transition-all duration-300 flex items-center gap-1 sm:gap-2 text-sm sm:text-base font-semibold"
+              >
+                <svg
+                  className="w-4 h-4"
+                  fill="none"
+                  stroke="currentColor"
+                  viewBox="0 0 24 24"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16"
+                  />
+                </svg>
+                <span className="hidden sm:inline">Clear All</span>
+              </button>
+            )}
+            <button
+              onClick={() => navigate("/transactions")}
+              className="px-3 sm:px-4 py-2 bg-gradient-to-r from-[#023e8a] to-[#0077b6] text-white rounded-lg sm:rounded-xl hover:shadow-lg transition-all duration-300 flex items-center gap-1 sm:gap-2 group text-sm sm:text-base"
             >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                strokeWidth={2}
-                d="M13 7l5 5m0 0l-5 5m5-5H6"
-              />
-            </svg>
-          </button>
+              <span className="font-semibold hidden sm:inline">View All</span>
+              <span className="font-semibold sm:hidden">All</span>
+              <svg
+                className="w-4 h-4 sm:w-5 sm:h-5 group-hover:translate-x-1 transition-transform"
+                fill="none"
+                stroke="currentColor"
+                viewBox="0 0 24 24"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth={2}
+                  d="M13 7l5 5m0 0l-5 5m5-5H6"
+                />
+              </svg>
+            </button>
+          </div>
         </div>
 
         {loading ? (
