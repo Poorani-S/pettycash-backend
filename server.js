@@ -18,6 +18,14 @@ connectDB().catch((err) => {
   }
 });
 
+// Initialize scheduler for weekly reports
+try {
+  const { scheduleWeeklyReports } = require("./services/schedulerService");
+  scheduleWeeklyReports();
+} catch (error) {
+  console.warn("⚠️ Scheduler service not initialized:", error.message);
+}
+
 // CORS Configuration - Allow multiple origins
 const allowedOrigins = [
   "http://localhost:3000",

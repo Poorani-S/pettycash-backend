@@ -1,5 +1,6 @@
 const User = require("../models/User");
 const OTP = require("../models/OTP");
+const LoginActivity = require("../models/LoginActivity");
 const { generateToken } = require("../utils/jwtUtils");
 const {
   generateOTP,
@@ -61,6 +62,19 @@ exports.login = async (req, res) => {
     const isMatch = await user.matchPassword(password);
 
     if (!isMatch) {
+      // Log failed login activity
+      await LoginActivity.create({
+        user: user._id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        loginMethod: "password",
+        loginStatus: "failed",
+        failureReason: "Invalid password",
+        ipAddress: req.ip || req.connection.remoteAddress,
+        userAgent: req.get("user-agent"),
+      });
+
       // Increment failed password attempts
       user.failedPasswordAttempts = (user.failedPasswordAttempts || 0) + 1;
       user.lastFailedPasswordAttempt = new Date();
@@ -96,6 +110,18 @@ exports.login = async (req, res) => {
     user.accountLockedUntil = null;
     user.lastLogin = new Date();
     await user.save();
+
+    // Log successful login activity
+    await LoginActivity.create({
+      user: user._id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      loginMethod: "password",
+      loginStatus: "success",
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get("user-agent"),
+    });
 
     // Generate JWT token
     const token = generateToken(user._id);
@@ -279,6 +305,19 @@ exports.verifyOTP = async (req, res) => {
 
     // Check if OTP matches
     if (otpRecord.otp !== otp) {
+      // Log failed login activity
+      await LoginActivity.create({
+        user: user._id,
+        email: user.email,
+        name: user.name,
+        role: user.role,
+        loginMethod: "otp",
+        loginStatus: "failed",
+        failureReason: "Invalid OTP",
+        ipAddress: req.ip || req.connection.remoteAddress,
+        userAgent: req.get("user-agent"),
+      });
+
       // Check if max attempts reached
       if (otpRecord.attempts >= 5) {
         // Lock account for 15 minutes
@@ -311,6 +350,18 @@ exports.verifyOTP = async (req, res) => {
     user.accountLockedUntil = null;
     user.lastLogin = new Date();
     await user.save();
+
+    // Log successful login activity
+    await LoginActivity.create({
+      user: user._id,
+      email: user.email,
+      name: user.name,
+      role: user.role,
+      loginMethod: "otp",
+      loginStatus: "success",
+      ipAddress: req.ip || req.connection.remoteAddress,
+      userAgent: req.get("user-agent"),
+    });
 
     // Generate JWT token
     const token = generateToken(user._id);

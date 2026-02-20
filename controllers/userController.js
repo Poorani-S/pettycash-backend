@@ -347,7 +347,10 @@ exports.createUser = async (req, res) => {
     }
 
     // Normalize empty/blank managerId to null to avoid ObjectId cast issues
-    if (typeof assignedManagerId === "string" && assignedManagerId.trim() === "") {
+    if (
+      typeof assignedManagerId === "string" &&
+      assignedManagerId.trim() === ""
+    ) {
       assignedManagerId = null;
     }
 
@@ -380,7 +383,7 @@ exports.createUser = async (req, res) => {
     let emailSent = false;
     let emailError = null;
     try {
-      const emailResult = await sendUserInvitation(user);
+      const emailResult = await sendUserInvitation(user, password);
       emailSent = emailResult.success;
       if (!emailResult.success) {
         emailError = emailResult.error;
