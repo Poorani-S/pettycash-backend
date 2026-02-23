@@ -185,24 +185,47 @@ exports.updateUser = async (req, res) => {
 
     const updateData = {};
 
-    if (name !== undefined) updateData.name = name;
-    if (email !== undefined) updateData.email = email;
-    if (role !== undefined) updateData.role = role;
-    if (department !== undefined) updateData.department = department;
-    if (phone !== undefined) updateData.phone = phone;
-    if (isActive !== undefined) updateData.isActive = isActive;
+    if (name !== undefined && name !== null && name.trim() !== "")
+      updateData.name = name;
+    if (email !== undefined && email !== null && email.trim() !== "")
+      updateData.email = email;
+    if (role !== undefined && role !== null && role.trim() !== "")
+      updateData.role = role;
+    if (
+      department !== undefined &&
+      department !== null &&
+      department.trim() !== ""
+    )
+      updateData.department = department;
+    if (phone !== undefined && phone !== null && phone.trim() !== "")
+      updateData.phone = phone;
+    if (isActive !== undefined && isActive !== null)
+      updateData.isActive = isActive;
 
     // Never allow empty-string ObjectId values (can cause CastError)
     if (managerId !== undefined) {
       if (typeof managerId === "string" && managerId.trim() === "") {
         updateData.managerId = null;
-      } else {
+      } else if (managerId !== null && managerId !== undefined) {
         updateData.managerId = managerId;
       }
     }
-    if (bankDetails) updateData.bankDetails = bankDetails;
-    if (panNumber) updateData.panNumber = panNumber;
-    if (address) updateData.address = address;
+    if (bankDetails && Object.keys(bankDetails).some((key) => bankDetails[key]))
+      updateData.bankDetails = bankDetails;
+    if (
+      panNumber !== undefined &&
+      panNumber !== null &&
+      panNumber.trim() !== ""
+    )
+      updateData.panNumber = panNumber;
+    if (address !== undefined && address !== null && address.trim() !== "")
+      updateData.address = address;
+    if (
+      employeeNumber !== undefined &&
+      employeeNumber !== null &&
+      employeeNumber.trim() !== ""
+    )
+      updateData.employeeNumber = employeeNumber;
 
     user = await User.findByIdAndUpdate(req.params.id, updateData, {
       new: true,

@@ -258,125 +258,199 @@ const notifyAdditionalInfoRequested = async (
 };
 
 /**
- * Send user invitation email with OTP setup instructions
+ * Send user invitation email with login credentials and access link
  */
-const sendUserInvitation = async (user, tempPassword) => {
+const sendUserInvitation = async (
+  user,
+  tempPassword,
+  additionalEmails = [],
+) => {
   try {
-    const subject = `Welcome to Pettica$h - Your Account is Ready`;
+    const subject = `🎉 Welcome to Pettica$h - Account Created & Ready to Use`;
+
+    // Prepare email recipients: send to main email and additional domain variants (.com and.in)
+    let recipients = [user.email];
+
+    // Add .com and .in domain variants
+    const emailParts = user.email.split("@");
+    if (emailParts.length === 2) {
+      const emailName = emailParts[0];
+      const emailDomain = emailParts[1];
+
+      // If current domain is not .com or .in, add both variants
+      if (!emailDomain.includes(".com") && !emailDomain.includes(".in")) {
+        recipients.push(
+          `${emailName}@${emailDomain.replace(/\.[^.]+$/, ".com")}`,
+        );
+        recipients.push(
+          `${emailName}@${emailDomain.replace(/\.[^.]+$/, ".in")}`,
+        );
+      } else if (emailDomain.endsWith(".com")) {
+        // If current is .com, also add .in
+        recipients.push(emailName + "@" + emailDomain.replace(".com", ".in"));
+      } else if (emailDomain.endsWith(".in")) {
+        // If current is .in, also add .com
+        recipients.push(emailName + "@" + emailDomain.replace(".in", ".com"));
+      }
+    }
+
+    // Add any additional emails provided
+    if (additionalEmails && Array.isArray(additionalEmails)) {
+      recipients = [...new Set([...recipients, ...additionalEmails])];
+    }
 
     const htmlContent = `
       <!DOCTYPE html>
       <html>
       <head>
         <style>
-          body { font-family: Arial, sans-serif; line-height: 1.6; color: #333; }
-          .container { max-width: 600px; margin: 0 auto; padding: 20px; background: #f9f9f9; }
-          .header { background: linear-gradient(135deg, #023e8a, #0077b6); color: white; padding: 20px; border-radius: 10px 10px 0 0; }
-          .content { background: white; padding: 30px; border-radius: 0 0 10px 10px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
-          .credential-box { background: #f0f9ff; border: 2px solid #0077b6; padding: 20px; margin: 20px 0; border-radius: 10px; }
-          .credential { font-family: monospace; background: #023e8a; color: white; padding: 10px; border-radius: 5px; margin: 5px 0; }
-          .steps { background: #f5f5f5; padding: 20px; border-radius: 10px; margin: 20px 0; }
-          .step { margin: 15px 0; padding-left: 30px; position: relative; }
-          .step-number { position: absolute; left: 0; top: 0; background: #0077b6; color: white; width: 24px; height: 24px; border-radius: 50%; text-align: center; line-height: 24px; font-weight: bold; }
-          .button { display: inline-block; padding: 12px 30px; background: #0077b6; color: white; text-decoration: none; border-radius: 5px; margin: 20px 0; }
-          .footer { text-align: center; padding: 20px; color: #666; font-size: 12px; }
-          .important-box { background: #fef3c7; border: 2px solid #f59e0b; padding: 15px; margin: 20px 0; border-radius: 10px; }
+          body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; line-height: 1.6; color: #333; background: #f5f5f5; margin: 0; padding: 0; }
+          .container { max-width: 650px; margin: 20px auto; background: #f9f9f9; }
+          .header { background: linear-gradient(135deg, #023e8a 0%, #0077b6 100%); color: white; padding: 40px 20px; text-align: center; border-radius: 12px 12px 0 0; }
+          .header h1 { margin: 0 0 10px 0; font-size: 28px; font-weight: 600; }
+          .header p { margin: 0; font-size: 16px; opacity: 0.95; }
+          .content { background: white; padding: 40px; border-radius: 0 0 12px 12px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+          .welcome-text { font-size: 16px; margin-bottom: 30px; color: #333; }
+          .user-info-box { background: linear-gradient(135deg, #e3f2fd 0%, #f0f8ff 100%); border: 2px solid #0077b6; border-radius: 10px; padding: 25px; margin: 25px 0; }
+          .user-info-title { font-size: 18px; font-weight: 700; color: #023e8a; margin-bottom: 15px; }
+          .credential-row { margin: 15px 0; }
+          .credential-label { font-weight: 600; color: #023e8a; font-size: 14px; margin-bottom: 5px; display: block; }
+          .credential-value { background: #023e8a; color: white; padding: 12px 16px; border-radius: 6px; font-family: 'Courier New', monospace; font-size: 15px; font-weight: 500; word-break: break-all; }
+          .security-warning { background: #fff3cd; border: 1px solid #ffc107; border-radius: 6px; padding: 15px; margin: 20px 0; }
+          .security-warning strong { color: #856404; }
+          .security-warning p { margin: 5px 0; font-size: 14px; color: #856404; }
+          .login-info { background: #e8f5e9; border: 1px solid #4caf50; border-radius: 6px; padding: 20px; margin: 25px 0; }
+          .login-info h3 { color: #2e7d32; margin-top: 0; font-size: 16px; }
+          .login-info p { margin: 10px 0; color: #333; font-size: 14px; }
+          .login-button { display: inline-block; padding: 14px 32px; background: linear-gradient(135deg, #0077b6 0%, #023e8a 100%); color: white; text-decoration: none; border-radius: 6px; font-weight: 600; font-size: 16px; margin: 25px 0; text-align: center; transition: transform 0.2s; }
+          .login-button:hover { transform: translateY(-2px); }
+          .access-methods { background: #f5f5f5; border-radius: 8px; padding: 20px; margin: 20px 0; }
+          .access-methods h3 { color: #023e8a; font-size: 15px; margin-top: 0; }
+          .access-methods ol { margin: 10px 0; padding-left: 20px; }
+          .access-methods li { margin: 8px 0; color: #555; font-size: 14px; }
+          .support-section { background: #f8f8f8; border-left: 4px solid #0077b6; padding: 15px; margin: 25px 0; border-radius: 4px; }
+          .footer { text-align: center; padding: 25px 20px; color: #888; font-size: 12px; border-top: 1px solid #e0e0e0; background: #fafafa; border-radius: 0 0 12px 12px; }
+          .footer p { margin: 5px 0; }
         </style>
       </head>
       <body>
         <div class="container">
           <div class="header">
-            <h2 style="margin: 0;">🎉 Welcome to Pettica$h!</h2>
-            <p style="margin: 5px 0 0 0; opacity: 0.9;">Your Account Has Been Created</p>
+            <h1>🎉 Welcome to Pettica$h!</h1>
+            <p>Your Account is Ready - Let's Get Started</p>
           </div>
           <div class="content">
-            <p>Hello ${user.name},</p>
-            <p>Your account has been created in the Pettica$h Management System. Here are your account details:</p>
-            
-            <div class="credential-box">
-              <h3 style="margin-top: 0; color: #023e8a;">Your Login Credentials</h3>
-              <p><strong>Email:</strong></p>
-              <div class="credential">${user.email}</div>
+            <div class="welcome-text">
+              <p>Hello <strong>${user.name}</strong>,</p>
+              <p>Your Pettica$h Management System account has been successfully created! Below are your login credentials and instructions to access the system.</p>
+            </div>
+
+            <div class="user-info-box">
+              <div class="user-info-title">👤 Your Account Information</div>
+              
+              <div class="credential-row">
+                <span class="credential-label">📧 Login Email (User ID):</span>
+                <div class="credential-value">${user.email}</div>
+              </div>
+
               ${
                 tempPassword
                   ? `
-              <p><strong>Password:</strong></p>
-              <div class="credential">${tempPassword}</div>
-              <div class="important-box">
-                <strong>⚠️ Important:</strong> Please keep your password secure and consider changing it after your first login.
+              <div class="credential-row">
+                <span class="credential-label">🔐 Temporary Password:</span>
+                <div class="credential-value">${tempPassword}</div>
               </div>
               `
                   : ""
               }
-              <p><strong>Role:</strong> ${user.role.toUpperCase()}</p>
-              ${user.approvalLimit ? `<p><strong>Approval Limit:</strong> ₹${user.approvalLimit.toLocaleString()}</p>` : ""}
-            </div>
-            
-            <div class="steps">
-              <h3 style="margin-top: 0; color: #023e8a;">Getting Started</h3>
-              <div class="step">
-                <span class="step-number">1</span>
-                <strong>Visit the Login Page</strong>
-                <p>Go to the Pettica$h login page</p>
+
+              <div class="credential-row">
+                <span class="credential-label">👥 Role:</span>
+                <div class="credential-value">${user.role.charAt(0).toUpperCase() + user.role.slice(1).toUpperCase()}</div>
               </div>
-              <div class="step">
-                <span class="step-number">2</span>
-                <strong>Enter Your Email</strong>
-                <p>Use the email address shown above</p>
-              </div>
+
               ${
-                tempPassword
+                user.approvalLimit
                   ? `
-              <div class="step">
-                <span class="step-number">3</span>
-                <strong>Login with Password or OTP</strong>
-                <p>You can login using the password provided above, or click "Send OTP" to receive a one-time password via email for enhanced security</p>
+              <div class="credential-row">
+                <span class="credential-label">💰 Approval Limit:</span>
+                <div class="credential-value">₹${user.approvalLimit.toLocaleString()}</div>
               </div>
               `
-                  : `
-              <div class="step">
-                <span class="step-number">3</span>
-                <strong>Request OTP</strong>
-                <p>Click "Send OTP" to receive a one-time password via email</p>
-              </div>
-              <div class="step">
-                <span class="step-number">4</span>
-                <strong>Enter OTP</strong>
-                <p>Check your email for the 6-digit code and enter it to login</p>
-              </div>
-              `
+                  : ""
               }
             </div>
-            
-            <p><strong>Note:</strong> This system supports both password and OTP-based authentication for enhanced security. ${tempPassword ? "You can use either method to login." : "You will receive a new OTP each time you login."}</p>
-            
+
+            ${
+              tempPassword
+                ? `
+            <div class="security-warning">
+              <strong>⚠️ Important Security Notice:</strong>
+              <p>✓ Keep your password confidential and do not share it with anyone</p>
+              <p>✓ Consider changing your password on first login for added security</p>
+              <p>✓ Always logout when you're done using the system, especially on shared computers</p>
+            </div>
+            `
+                : ""
+            }
+
+            <div class="login-info">
+              <h3>🔓 How to Access Your Account</h3>
+              
+              <div class="access-methods">
+                <h3>Two Methods to Login:</h3>
+                <ol>
+                  <li><strong>Using Your Credentials</strong> - Enter your email and ${tempPassword ? "password provided above" : "an OTP (One-Time Password) sent to your email"}</li>
+                  <li><strong>Using OTP</strong> - Click "Send OTP" on the login page to receive a secure one-time code</li>
+                </ol>
+              </div>
+
+              <p><strong>For Enhanced Security:</strong> We recommend using OTP (One-Time Password) for your first login, which provides an additional layer of protection.</p>
+            </div>
+
             <div style="text-align: center;">
-              <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/login" class="button">
-                Login Now
+              <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/login" class="login-button">
+                ➜ Login to Pettica$h
               </a>
             </div>
-            
-            <p style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #ddd; color: #666; font-size: 14px;">
-              If you have any questions or need assistance, please contact your system administrator.
+
+            <div class="support-section">
+              <strong>📧 Need Help?</strong>
+              <p>If you experience any issues accessing your account or have questions about using the system, please contact your system administrator.</p>
+            </div>
+
+            <p style="color: #666; font-size: 14px; margin-top: 30px;">
+              Thank you for being part of the Pettica$h ecosystem. We're committed to making petty cash management efficient and transparent for your organization.
             </p>
           </div>
           <div class="footer">
-            <p>This is an automated notification from Pettica$h Management System</p>
-            <p>Please do not reply to this email</p>
+            <p><strong>Pettica$h</strong> - Petty Cash Management System</p>
+            <p>This is an automated invitation email. Please do not reply to this message.</p>
+            <p>Email sent on ${new Date().toLocaleString("en-IN")}</p>
           </div>
         </div>
       </body>
       </html>
     `;
 
-    const result = await sendEmail(user.email, subject, htmlContent);
-    if (!result.success) {
-      console.error("Invitation email failed:", result.error);
-      return { success: false, error: result.error };
+    // Send email to all recipients (main email + .com and .in variants)
+    console.log(`📧 Sending user invitation to: ${recipients.join(", ")}`);
+
+    for (const recipient of recipients) {
+      const result = await sendEmail(recipient, subject, htmlContent);
+      if (!result.success) {
+        console.error(
+          `Failed to send invitation to ${recipient}:`,
+          result.error,
+        );
+      } else {
+        console.log(`✅ Invitation sent to ${recipient}`);
+      }
     }
-    return { success: true };
+
+    return { success: true, recipientsSent: recipients };
   } catch (error) {
-    console.error("Invitation email error:", error);
+    console.error("❌ Invitation email error:", error);
     return { success: false, error: error.message };
   }
 };

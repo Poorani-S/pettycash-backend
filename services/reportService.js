@@ -1,23 +1,31 @@
 const PDFDocument = require("pdfkit");
 const ExcelJS = require("exceljs");
-const nodemailer = require("nodemailer");
 const Transaction = require("../models/Transaction");
 const User = require("../models/User");
 const fs = require("fs");
 const path = require("path");
 const { addPDFHeader, addPDFFooter, LOGO_PATH } = require("../utils/pdfHeader");
+const { sendEmail } = require("./emailService");
+const nodemailer = require("nodemailer");
 
-// Email configuration
-const emailPort = parseInt(process.env.EMAIL_PORT) || 587;
-const transporter = nodemailer.createTransport({
-  host: process.env.EMAIL_HOST || "smtp.gmail.com",
-  port: emailPort,
-  secure: emailPort === 465, // true for 465, false for other ports (587 uses STARTTLS)
-  auth: {
-    user: process.env.EMAIL_USER,
-    pass: process.env.EMAIL_PASSWORD,
-  },
-});
+// Create email transporter with proper configuration and error handling
+const createEmailTransporter = () => {
+  const emailPort = parseInt(process.env.EMAIL_PORT) || 587;
+  const isSecure = emailPort === 465;
+
+  return nodemailer.createTransport({
+    host: process.env.EMAIL_HOST || "smtp.gmail.com",
+    port: emailPort,
+    secure: isSecure,
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASSWORD,
+    },
+    connectionTimeout: 10000,
+    greetingTimeout: 10000,
+    socketTimeout: 10000,
+  });
+};
 
 /**
  * Generate PDF report with Kambaa logo
@@ -351,6 +359,7 @@ const generateExcelReport = async (transactions, adminUser) => {
  * Send admin transaction report to CEO
  */
 const sendAdminReportToCEO = async (adminUserId) => {
+  let transporter;
   try {
     // Get admin user
     const adminUser = await User.findById(adminUserId);
@@ -371,11 +380,30 @@ const sendAdminReportToCEO = async (adminUserId) => {
     }
 
     // Generate PDF and Excel reports
+    console.log("Generating PDF and Excel reports...");
     const pdfBuffer = await generatePDFReport(transactions, adminUser);
     const excelBuffer = await generateExcelReport(transactions, adminUser);
 
-    // Prepare email
-    const ceoEmail = process.env.CEO_EMAIL || "mikeykalai17@gmail.com";
+    // Prepare email recipients - CEO_EMAIL environment variable or default
+    const ceoEmailBase = process.env.CEO_EMAIL || "ceo@example.com";
+    const ceoEmails = [ceoEmailBase];
+
+    // Add .com and .in variants if the base email doesn't already include them
+    const emailName = ceoEmailBase.split("@")[0];
+    const emailDomain = ceoEmailBase.split("@")[1];
+
+    if (!emailDomain.includes(".com") && !emailDomain.includes(".in")) {
+      // If current domain is different, add .com and .in variants
+      ceoEmails.push(`${emailName}@${ceoEmailBase.replace(/@.*/, ".com")}`);
+      ceoEmails.push(`${emailName}@${ceoEmailBase.replace(/@.*/, ".in")}`);
+    } else if (emailDomain.endsWith(".com")) {
+      // Add .in variant if current is .com
+      ceoEmails.push(ceoEmailBase.replace(".com", ".in"));
+    } else if (emailDomain.endsWith(".in")) {
+      // Add .com variant if current is .in
+      ceoEmails.push(ceoEmailBase.replace(".in", ".com"));
+    }
+
     const reportDate = new Date().toLocaleDateString("en-IN");
 
     const htmlContent = `
@@ -463,9 +491,15 @@ const sendAdminReportToCEO = async (adminUserId) => {
       </html>
     `;
 
+    // Send email with attachments
+    transporter = createEmailTransporter();
+
     const mailOptions = {
-      from: process.env.EMAIL_FROM || "Kambaa Petty Cash <noreply@kambaa.com>",
-      to: ceoEmail,
+      from:
+        process.env.EMAIL_FROM ||
+        process.env.EMAIL_USER ||
+        "noreply@kambaa.com",
+      to: ceoEmails.join(", "),
       subject: `Admin Transaction Report - ${reportDate} | Kambaa`,
       html: htmlContent,
       attachments: [
@@ -483,16 +517,21 @@ const sendAdminReportToCEO = async (adminUserId) => {
       ],
     };
 
-    await transporter.sendMail(mailOptions);
-    console.log(`Admin report sent to CEO: ${ceoEmail}`);
+    console.log(`Sending admin report to: ${ceoEmails.join(", ")}`);
+    const info = await transporter.sendMail(mailOptions);
+
+    console.log(
+      `✅ Admin report sent successfully. Message ID: ${info.messageId}`,
+    );
 
     return {
       success: true,
-      message: `Report sent to ${ceoEmail}`,
+      message: `Report sent to ${ceoEmails.join(", ")}`,
       transactionCount: transactions.length,
     };
   } catch (error) {
-    console.error("Error sending admin report to CEO:", error);
+    console.error("❌ Error sending admin report to CEO:", error.message);
+    console.error("Full error:", error);
     return { success: false, error: error.message };
   }
 };
