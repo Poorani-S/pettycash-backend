@@ -127,6 +127,11 @@ const userSchema = new mongoose.Schema(
       ref: "User", // Admin creates users
       default: null,
     },
+    // Track when temporary password was reset/regenerated
+    temporaryPasswordResetAt: {
+      type: Date,
+      default: null,
+    },
   },
   {
     timestamps: true,

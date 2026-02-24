@@ -8,6 +8,8 @@ const {
   deleteUser,
   deactivateUser,
   resendInvitation,
+  resetUserPassword,
+  getUserPasswordInfo,
 } = require("../controllers/userController");
 const { protect, authorize } = require("../middleware/authMiddleware");
 
@@ -33,6 +35,18 @@ router.post(
   protect,
   authorize("admin", "manager"),
   resendInvitation,
+);
+router.post(
+  "/:id/reset-password",
+  protect,
+  authorize("admin"),
+  resetUserPassword,
+);
+router.get(
+  "/:id/password-info",
+  protect,
+  authorize("admin"),
+  getUserPasswordInfo,
 );
 
 module.exports = router;

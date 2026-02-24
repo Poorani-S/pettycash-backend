@@ -94,6 +94,7 @@ app.use("/api/reports", require("./routes/reportRoutes"));
 app.use("/api/fund-transfers", require("./routes/fundTransferRoutes"));
 app.use("/api/clients", require("./routes/clientRoutes"));
 app.use("/api/user-activity", require("./routes/userActivityRoutes"));
+app.use("/api/camera-upload", require("./routes/cameraUploadRoutes"));
 
 // 404 handler
 app.use((req, res) => {

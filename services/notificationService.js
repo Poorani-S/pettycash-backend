@@ -268,33 +268,10 @@ const sendUserInvitation = async (
   try {
     const subject = `🎉 Welcome to Pettica$h - Account Created & Ready to Use`;
 
-    // Prepare email recipients: send to main email and additional domain variants (.com and.in)
+    // Prepare email recipients: send only to the user's email address
     let recipients = [user.email];
 
-    // Add .com and .in domain variants
-    const emailParts = user.email.split("@");
-    if (emailParts.length === 2) {
-      const emailName = emailParts[0];
-      const emailDomain = emailParts[1];
-
-      // If current domain is not .com or .in, add both variants
-      if (!emailDomain.includes(".com") && !emailDomain.includes(".in")) {
-        recipients.push(
-          `${emailName}@${emailDomain.replace(/\.[^.]+$/, ".com")}`,
-        );
-        recipients.push(
-          `${emailName}@${emailDomain.replace(/\.[^.]+$/, ".in")}`,
-        );
-      } else if (emailDomain.endsWith(".com")) {
-        // If current is .com, also add .in
-        recipients.push(emailName + "@" + emailDomain.replace(".com", ".in"));
-      } else if (emailDomain.endsWith(".in")) {
-        // If current is .in, also add .com
-        recipients.push(emailName + "@" + emailDomain.replace(".in", ".com"));
-      }
-    }
-
-    // Add any additional emails provided
+    // Add any additional emails provided (only if they are valid)
     if (additionalEmails && Array.isArray(additionalEmails)) {
       recipients = [...new Set([...recipients, ...additionalEmails])];
     }
@@ -433,9 +410,9 @@ const sendUserInvitation = async (
       </html>
     `;
 
-    // Send email to all recipients (main email + .com and .in variants)
-    console.log(`📧 Sending user invitation to: ${recipients.join(", ")}`);
-
+    // Send invitation email to user
+    console.log(`📧 Sending user invitation to: ${user.email}`);
+    
     for (const recipient of recipients) {
       const result = await sendEmail(recipient, subject, htmlContent);
       if (!result.success) {

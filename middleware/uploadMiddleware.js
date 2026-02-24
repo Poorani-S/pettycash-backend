@@ -11,8 +11,9 @@ if (!fs.existsSync(uploadDir)) {
 // Create subdirectories for different file types
 const invoicesDir = path.join(uploadDir, "invoices");
 const paymentsDir = path.join(uploadDir, "payments");
+const cameraDir = path.join(uploadDir, "camera");
 
-[invoicesDir, paymentsDir].forEach((dir) => {
+[invoicesDir, paymentsDir, cameraDir].forEach((dir) => {
   if (!fs.existsSync(dir)) {
     fs.mkdirSync(dir, { recursive: true });
   }
@@ -26,6 +27,8 @@ const storage = multer.diskStorage({
       cb(null, invoicesDir);
     } else if (file.fieldname === "paymentProofImage") {
       cb(null, paymentsDir);
+    } else if (file.fieldname === "cameraImage") {
+      cb(null, cameraDir);
     } else {
       cb(null, uploadDir);
     }

@@ -536,3 +536,90 @@ exports.resendInvitation = async (req, res) => {
     res.status(500).json({ success: false, message: error.message });
   }
 };
+// @desc    Reset/regenerate user password (Admin only)
+// @route   POST /api/users/:id/reset-password
+// @access  Private (Admin)
+exports.resetUserPassword = async (req, res) => {
+  try {
+    console.log("=== RESET PASSWORD START ===");
+    console.log("User ID:", req.params.id);
+
+    const user = await User.findById(req.params.id);
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    // Generate a new secure password
+    const newPassword = `Pettycash@${Math.random().toString(36).slice(-8)}`;
+
+    // Update user password
+    user.password = newPassword;
+    user.temporaryPasswordResetAt = new Date();
+    await user.save();
+
+    console.log("✅ Password reset successfully");
+
+    res.status(200).json({
+      success: true,
+      message: "Password reset successfully. New password generated.",
+      data: {
+        userId: user._id,
+        email: user.email,
+        newPassword: newPassword,
+        name: user.name,
+        generatedAt: user.temporaryPasswordResetAt,
+      },
+    });
+  } catch (error) {
+    console.error("❌ Reset password error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
+
+// @desc    Get user details including recently generated password info
+// @route   GET /api/users/:id/password-info
+// @access  Private (Admin)
+exports.getUserPasswordInfo = async (req, res) => {
+  try {
+    const user = await User.findById(req.params.id).select(
+      "name email role temporaryPasswordResetAt createdAt",
+    );
+
+    if (!user) {
+      return res
+        .status(404)
+        .json({ success: false, message: "User not found" });
+    }
+
+    const createdWithinDay =
+      new Date() - new Date(user.createdAt) < 24 * 60 * 60 * 1000;
+    const passwordResetWithinDay =
+      user.temporaryPasswordResetAt &&
+      new Date() - new Date(user.temporaryPasswordResetAt) <
+        24 * 60 * 60 * 1000;
+
+    res.status(200).json({
+      success: true,
+      data: {
+        userId: user._id,
+        name: user.name,
+        email: user.email,
+        role: user.role,
+        createdAt: user.createdAt,
+        temporaryPasswordResetAt: user.temporaryPasswordResetAt,
+        canViewPassword: createdWithinDay || passwordResetWithinDay,
+        message: createdWithinDay
+          ? "Password was auto-generated when account was created"
+          : passwordResetWithinDay
+            ? "Password was recently regenerated"
+            : "Password regeneration available on demand",
+      },
+    });
+  } catch (error) {
+    console.error("❌ Get password info error:", error);
+    res.status(500).json({ success: false, message: error.message });
+  }
+};
