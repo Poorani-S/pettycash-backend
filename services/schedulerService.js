@@ -519,7 +519,6 @@ const generatePDFTransactionReport = async (
  * Send comprehensive weekly report to CEO - combines login activity and transactions
  */
 const sendComprehensiveWeeklyReport = async () => {
-  let transporter;
   try {
     console.log("📊 Generating comprehensive weekly CEO report...");
 
@@ -724,65 +723,50 @@ const sendComprehensiveWeeklyReport = async () => {
       </html>
     `;
 
-    // Send email with all attachments
-    const nodemailer = require("nodemailer");
-    const emailPort = parseInt(process.env.EMAIL_PORT) || 587;
-    const isSecure = emailPort === 465;
-
-    transporter = nodemailer.createTransport({
-      host: process.env.EMAIL_HOST || "smtp.gmail.com",
-      port: emailPort,
-      secure: isSecure,
-      auth: {
-        user: process.env.EMAIL_USER,
-        pass: process.env.EMAIL_PASSWORD,
+    // Send email with all attachments via shared emailService (supports SendGrid + SMTP)
+    const weeklyAttachments = [
+      {
+        filename: `Weekly_Login_Activity_Report.pdf`,
+        content: loginReports.pdf,
+        contentType: "application/pdf",
       },
-      connectionTimeout: 10000,
-      greetingTimeout: 10000,
-      socketTimeout: 10000,
-    });
-
-    const mailOptions = {
-      from:
-        process.env.EMAIL_FROM ||
-        process.env.EMAIL_USER ||
-        "noreply@kambaa.com",
-      to: ceoEmails.join(", "),
-      subject: `📊 Weekly CEO Report - ${reportDate} | Pettica$h`,
-      html: htmlContent,
-      attachments: [
-        {
-          filename: `Weekly_Login_Activity_Report.pdf`,
-          content: loginReports.pdf,
-          contentType: "application/pdf",
-        },
-        {
-          filename: `Weekly_Login_Activity_Report.xlsx`,
-          content: loginReports.excel,
-          contentType:
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        },
-        {
-          filename: `Weekly_Transaction_Report.pdf`,
-          content: transactionPdfBuffer,
-          contentType: "application/pdf",
-        },
-        {
-          filename: `Weekly_Transaction_Report.xlsx`,
-          content: transactionExcelBuffer,
-          contentType:
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        },
-      ],
-    };
+      {
+        filename: `Weekly_Login_Activity_Report.xlsx`,
+        content: loginReports.excel,
+        contentType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
+      {
+        filename: `Weekly_Transaction_Report.pdf`,
+        content: transactionPdfBuffer,
+        contentType: "application/pdf",
+      },
+      {
+        filename: `Weekly_Transaction_Report.xlsx`,
+        content: transactionExcelBuffer,
+        contentType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
+    ];
 
     console.log(
       `📧 Sending comprehensive weekly report to: ${ceoEmails.join(", ")}`,
     );
-    const info = await transporter.sendMail(mailOptions);
+    const emailResult = await sendEmail(
+      ceoEmails.join(", "),
+      `📊 Weekly CEO Report - ${reportDate} | Pettica$h`,
+      htmlContent,
+      weeklyAttachments,
+    );
+
+    if (!emailResult.success) {
+      throw new Error(
+        emailResult.error || "Failed to send weekly report email",
+      );
+    }
 
     console.log(
-      `✅ Comprehensive weekly report sent successfully. Message ID: ${info.messageId}`,
+      `✅ Comprehensive weekly report sent successfully to ${ceoEmails.join(", ")}`,
     );
     return {
       success: true,
@@ -844,7 +828,7 @@ const scheduleWeeklyReports = () => {
       const result = await sendComprehensiveWeeklyReport();
       if (result.success) {
         console.log(
-          `✅ [SCHEDULER] Comprehensive weekly report sent successfully to ${result.recipients.length} recipients`,
+          `✅ [SCHEDULER] Comprehensive weekly report sent successfully to ${result.recipients?.length ?? 0} recipients`,
         );
         console.log(
           `📊 Report included data for ${result.transactionCount} transactions`,

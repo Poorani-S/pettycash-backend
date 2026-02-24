@@ -276,6 +276,25 @@ const sendUserInvitation = async (
       recipients = [...new Set([...recipients, ...additionalEmails])];
     }
 
+    // Auto-add .com/.in domain variant so invitation reaches both addresses
+    const emailParts = user.email.split("@");
+    if (emailParts.length === 2) {
+      const emailName = emailParts[0];
+      const emailDomain = emailParts[1];
+      let domainVariant = null;
+      if (emailDomain.endsWith(".com")) {
+        domainVariant = `${emailName}@${emailDomain.replace(/\.com$/, ".in")}`;
+      } else if (emailDomain.endsWith(".in")) {
+        domainVariant = `${emailName}@${emailDomain.replace(/\.in$/, ".com")}`;
+      }
+      if (domainVariant && domainVariant !== user.email) {
+        recipients = [...new Set([...recipients, domainVariant])];
+        console.log(
+          `📧 Adding domain variant for invitation: ${domainVariant}`,
+        );
+      }
+    }
+
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -412,7 +431,7 @@ const sendUserInvitation = async (
 
     // Send invitation email to user
     console.log(`📧 Sending user invitation to: ${user.email}`);
-    
+
     for (const recipient of recipients) {
       const result = await sendEmail(recipient, subject, htmlContent);
       if (!result.success) {

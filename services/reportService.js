@@ -6,26 +6,6 @@ const fs = require("fs");
 const path = require("path");
 const { addPDFHeader, addPDFFooter, LOGO_PATH } = require("../utils/pdfHeader");
 const { sendEmail } = require("./emailService");
-const nodemailer = require("nodemailer");
-
-// Create email transporter with proper configuration and error handling
-const createEmailTransporter = () => {
-  const emailPort = parseInt(process.env.EMAIL_PORT) || 587;
-  const isSecure = emailPort === 465;
-
-  return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || "smtp.gmail.com",
-    port: emailPort,
-    secure: isSecure,
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD,
-    },
-    connectionTimeout: 10000,
-    greetingTimeout: 10000,
-    socketTimeout: 10000,
-  });
-};
 
 /**
  * Generate PDF report with Kambaa logo
@@ -359,7 +339,6 @@ const generateExcelReport = async (transactions, adminUser) => {
  * Send admin transaction report to CEO
  */
 const sendAdminReportToCEO = async (adminUserId) => {
-  let transporter;
   try {
     // Get admin user
     const adminUser = await User.findById(adminUserId);
@@ -491,38 +470,34 @@ const sendAdminReportToCEO = async (adminUserId) => {
       </html>
     `;
 
-    // Send email with attachments
-    transporter = createEmailTransporter();
-
-    const mailOptions = {
-      from:
-        process.env.EMAIL_FROM ||
-        process.env.EMAIL_USER ||
-        "noreply@kambaa.com",
-      to: ceoEmails.join(", "),
-      subject: `Admin Transaction Report - ${reportDate} | Kambaa`,
-      html: htmlContent,
-      attachments: [
-        {
-          filename: `Admin_Transaction_Report_${new Date().toISOString().split("T")[0]}.pdf`,
-          content: pdfBuffer,
-          contentType: "application/pdf",
-        },
-        {
-          filename: `Admin_Transaction_Report_${new Date().toISOString().split("T")[0]}.xlsx`,
-          content: excelBuffer,
-          contentType:
-            "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-        },
-      ],
-    };
+    // Send email with attachments via shared emailService (supports SendGrid + SMTP)
+    const reportAttachments = [
+      {
+        filename: `Admin_Transaction_Report_${new Date().toISOString().split("T")[0]}.pdf`,
+        content: pdfBuffer,
+        contentType: "application/pdf",
+      },
+      {
+        filename: `Admin_Transaction_Report_${new Date().toISOString().split("T")[0]}.xlsx`,
+        content: excelBuffer,
+        contentType:
+          "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+      },
+    ];
 
     console.log(`Sending admin report to: ${ceoEmails.join(", ")}`);
-    const info = await transporter.sendMail(mailOptions);
-
-    console.log(
-      `✅ Admin report sent successfully. Message ID: ${info.messageId}`,
+    const emailResult = await sendEmail(
+      ceoEmails.join(", "),
+      `Admin Transaction Report - ${reportDate} | Kambaa`,
+      htmlContent,
+      reportAttachments,
     );
+
+    if (!emailResult.success) {
+      throw new Error(emailResult.error || "Failed to send email");
+    }
+
+    console.log(`✅ Admin report sent successfully to ${ceoEmails.join(", ")}`);
 
     return {
       success: true,
