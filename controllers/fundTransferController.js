@@ -127,6 +127,11 @@ exports.getFundTransfers = async (req, res) => {
     // Build query
     const query = {};
 
+    // Role-based filtering: employees/interns see only their own fund transfers
+    if (req.user.role === "employee" || req.user.role === "intern") {
+      query.initiatedBy = req.user._id;
+    }
+
     if (transferType) {
       query.transferType = transferType;
     }
@@ -183,6 +188,18 @@ exports.getFundTransferById = async (req, res) => {
         success: false,
         message: "Fund transfer not found",
       });
+    }
+
+    // Role-based access: employees/interns can only view their own fund transfers
+    if (req.user.role === "employee" || req.user.role === "intern") {
+      if (
+        fundTransfer.initiatedBy?._id?.toString() !== req.user._id.toString()
+      ) {
+        return res.status(403).json({
+          success: false,
+          message: "Not authorized to view this fund transfer",
+        });
+      }
     }
 
     res.status(200).json({
@@ -244,6 +261,12 @@ exports.getFundTransferStats = async (req, res) => {
     const { startDate, endDate } = req.query;
 
     const matchStage = {};
+
+    // Role-based filtering: employees/interns see only their own fund transfer stats
+    if (req.user.role === "employee" || req.user.role === "intern") {
+      matchStage.initiatedBy = req.user._id;
+    }
+
     if (startDate || endDate) {
       matchStage.transferDate = {};
       if (startDate) matchStage.transferDate.$gte = new Date(startDate);

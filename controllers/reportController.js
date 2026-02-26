@@ -70,20 +70,7 @@ const buildTransactionRoleMatch = async (user) => {
     };
   }
 
-  if (user.role === "manager" || user.role === "approver") {
-    const teamMembers = await User.find({ managerId: user._id }, "_id");
-    const teamMemberIds = teamMembers.map((member) => member._id);
-    return {
-      $or: [
-        { submittedBy: user._id },
-        { requestedBy: user._id },
-        { submittedBy: { $in: teamMemberIds } },
-        { requestedBy: { $in: teamMemberIds } },
-      ],
-    };
-  }
-
-  // Admin, employee, and auditor can see all transactions
+  // Admin, manager, approver, and auditor can see all transactions
   return {};
 };
 
@@ -122,17 +109,20 @@ exports.getFinancialSummary = async (req, res) => {
     }
 
     // Fund transfers summary
-    // NOTE: fund transfer access is restricted elsewhere to admin/manager.
-    // Keep this endpoint usable for all roles, but only return fund transfer aggregates to admin/manager.
-    const canSeeFundTransfers =
-      req.user?.role === "admin" || req.user?.role === "manager";
+    // Role-based: employees/interns see only their own fund transfers, admin/manager see all
+    const canSeeFundTransfers = true; // All roles can see fund transfers (filtered by role below)
+
+    let fundTransferMatchFiltered = { ...fundTransferMatch };
+    if (req.user?.role === "employee" || req.user?.role === "intern") {
+      fundTransferMatchFiltered.initiatedBy = req.user._id;
+    }
 
     let byTypeArr = [];
     let overallObj = { total: 0, count: 0 };
 
     if (canSeeFundTransfers) {
       const fundTransferAgg = await FundTransfer.aggregate([
-        { $match: fundTransferMatch },
+        { $match: fundTransferMatchFiltered },
         {
           $facet: {
             byType: [

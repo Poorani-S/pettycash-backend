@@ -1,109 +1,124 @@
 const nodemailer = require("nodemailer");
-const sgMail = require("@sendgrid/mail");
 
-// Configure SendGrid (for production)
-if (process.env.SENDGRID_API_KEY) {
-  sgMail.setApiKey(process.env.SENDGRID_API_KEY);
-}
-
-// Configure SMTP (for development)
-const createSMTPTransporter = () => {
-  const port = parseInt(process.env.EMAIL_PORT) || 587;
-  const isSecure = port === 465;
-
+// ── AWS SES transporter ──
+const createTransporter = () => {
   return nodemailer.createTransport({
-    host: process.env.EMAIL_HOST || "smtp.gmail.com",
-    port: port,
-    secure: isSecure,
+    host: process.env.SMTP_HOST,
+    port: parseInt(process.env.SMTP_PORT, 10) || 587,
+    secure: false,
     auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASSWORD,
+      user: process.env.SMTP_USER,
+      pass: process.env.SMTP_PASS,
     },
     connectionTimeout: 10000,
     greetingTimeout: 10000,
     socketTimeout: 10000,
+    tls: { rejectUnauthorized: false },
   });
 };
 
+// Sender identity
+const SENDER_EMAIL = process.env.EMAIL_FROM || "contact@kambaa.ai";
+const SENDER_WITH_NAME = `Petty Cash <${SENDER_EMAIL}>`;
+
 /**
- * Send email using SendGrid (production) or SMTP (development)
- * @param {string} to - Recipient email address(es) — single address or comma-separated list
+ * Strip emojis and special chars from subject lines.
+ * Microsoft 365 EOP flags emoji-heavy subjects as spam.
+ */
+const cleanSubject = (subject) => {
+  return subject
+    .replace(/[\u{1F600}-\u{1F64F}]/gu, "")
+    .replace(/[\u{1F300}-\u{1F5FF}]/gu, "")
+    .replace(/[\u{1F680}-\u{1F6FF}]/gu, "")
+    .replace(/[\u{1F1E0}-\u{1F1FF}]/gu, "")
+    .replace(/[\u{2600}-\u{26FF}]/gu, "")
+    .replace(/[\u{2700}-\u{27BF}]/gu, "")
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, "")
+    .replace(/[\u{1F900}-\u{1F9FF}]/gu, "")
+    .replace(/[\u{200D}]/gu, "")
+    .replace(/[\u{20E3}]/gu, "")
+    .replace(/[\u{E0020}-\u{E007F}]/gu, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
+};
+
+/**
+ * Strip HTML to plain-text (critical for Microsoft 365 deliverability).
+ */
+const htmlToPlainText = (html) => {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/<\/p>/gi, "\n\n")
+    .replace(/<\/div>/gi, "\n")
+    .replace(/<\/tr>/gi, "\n")
+    .replace(/<\/li>/gi, "\n")
+    .replace(/<li[^>]*>/gi, "  - ")
+    .replace(/<[^>]+>/g, "")
+    .replace(/&nbsp;/g, " ")
+    .replace(/&amp;/g, "&")
+    .replace(/&lt;/g, "<")
+    .replace(/&gt;/g, ">")
+    .replace(/&quot;/g, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&rsquo;/g, "'")
+    .replace(/&copy;/g, "(c)")
+    .replace(/₹/g, "Rs.")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+};
+
+/**
+ * Send email via AWS SES SMTP.
+ * Subjects are auto-cleaned (emojis stripped) for Microsoft 365 compatibility.
+ *
+ * @param {string} to - Recipient email (single or comma-separated)
  * @param {string} subject - Email subject
  * @param {string} htmlContent - HTML body
- * @param {Array} attachments - Optional array of attachment objects:
- *   { filename: string, content: Buffer, contentType: string }
+ * @param {Array}  attachments - Optional nodemailer attachment objects
  */
 const sendEmail = async (to, subject, htmlContent, attachments = []) => {
   try {
-    console.log("📧 Email Config Debug:");
-    console.log("   - EMAIL_HOST:", process.env.EMAIL_HOST);
-    console.log("   - EMAIL_PORT:", process.env.EMAIL_PORT);
-    console.log(
-      "   - EMAIL_USER:",
-      process.env.EMAIL_USER ? "✓ Set" : "✗ Not Set",
-    );
-    console.log(
-      "   - EMAIL_PASSWORD:",
-      process.env.EMAIL_PASSWORD ? "✓ Set" : "✗ Not Set",
-    );
-    console.log(
-      "   - SENDGRID_API_KEY:",
-      process.env.SENDGRID_API_KEY ? "✓ Set" : "✗ Not Set",
-    );
+    const safeSubject = cleanSubject(subject);
 
-    // Use SendGrid if API key is available (production)
-    if (process.env.SENDGRID_API_KEY) {
-      console.log("📧 Sending email via SendGrid to:", to);
+    console.log(`📧 Sending email via AWS SES`);
+    console.log("   - From:", SENDER_WITH_NAME);
+    console.log("   - To:", to);
+    console.log("   - Subject:", safeSubject);
 
-      const msg = {
-        to: to,
-        from: process.env.SENDGRID_FROM_EMAIL || process.env.EMAIL_USER,
-        subject: subject,
-        html: htmlContent,
-      };
+    const transporter = createTransporter();
+    const mailOptions = {
+      from: SENDER_WITH_NAME,
+      to,
+      replyTo: SENDER_EMAIL,
+      subject: safeSubject,
+      html: htmlContent,
+      text: htmlToPlainText(htmlContent),
+      headers: {
+        "X-Mailer": "PettyCash-App",
+        "X-Priority": "3",
+        "List-Unsubscribe": `<mailto:${SENDER_EMAIL}?subject=unsubscribe>`,
+      },
+      encoding: "utf-8",
+    };
 
-      // Add attachments in SendGrid format
-      if (attachments && attachments.length > 0) {
-        msg.attachments = attachments.map((att) => ({
-          content: Buffer.isBuffer(att.content)
-            ? att.content.toString("base64")
-            : Buffer.from(att.content).toString("base64"),
-          filename: att.filename,
-          type: att.contentType || "application/octet-stream",
-          disposition: "attachment",
-        }));
-      }
-
-      await sgMail.send(msg);
-      console.log("✅ Email sent via SendGrid");
-      return { success: true };
+    if (attachments && attachments.length > 0) {
+      mailOptions.attachments = attachments;
     }
-    // Fallback to SMTP (development/local)
-    else {
-      console.log("📧 Sending email via SMTP to:", to);
 
-      const transporter = createSMTPTransporter();
-      const mailOptions = {
-        from: process.env.EMAIL_FROM || `Pettyca$h <${process.env.EMAIL_USER}>`,
-        to: to,
-        subject: subject,
-        html: htmlContent,
-      };
-
-      // Add attachments in nodemailer format
-      if (attachments && attachments.length > 0) {
-        mailOptions.attachments = attachments;
-      }
-
-      const info = await transporter.sendMail(mailOptions);
-      console.log("✅ Email sent via SMTP. Message ID:", info.messageId);
-      return { success: true };
-    }
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`✅ Email sent via AWS SES. Message ID:`, info.messageId);
+    return { success: true, messageId: info.messageId };
   } catch (error) {
     console.error("❌ Email send error:", error.message);
-    console.error("Error details:", error.response?.body || error);
+    console.error("Error details:", error.response || error);
     return { success: false, error: error.message };
   }
+};
+
+module.exports = {
+  sendEmail,
 };
 
 module.exports = {

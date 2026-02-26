@@ -10,7 +10,7 @@ const sendOTPEmail = async (email, otp, name) => {
   try {
     console.log("📧 Sending OTP to:", email);
 
-    const subject = "Your Pettyca$h Login OTP";
+    const subject = "Your Petty Cash Login OTP";
     const htmlContent = `
       <!DOCTYPE html>
       <html>
@@ -29,20 +29,20 @@ const sendOTPEmail = async (email, otp, name) => {
       <body>
         <div class="container">
           <div class="header">
-            <h1 style="margin: 0;">💰 Pettyca$h</h1>
+            <h1 style="margin: 0;">Petty Cash</h1>
             <p style="margin: 10px 0 0 0; opacity: 0.9;">One-Time Password Verification</p>
           </div>
           <div class="content">
             <p>Hello <strong>${name}</strong>,</p>
-            <p>You have requested to log in to your Pettyca$h account. Please use the following One-Time Password (OTP) to proceed:</p>
+            <p>You have requested to log in to your Pettycash account. Please use the following One-Time Password (OTP) to proceed:</p>
             
             <div class="otp-box">
               <div class="otp-code">${otp}</div>
-              <p style="margin: 10px 0 0 0; color: #6b7280;">⏰ Valid for 10 minutes</p>
+              <p style="margin: 10px 0 0 0; color: #6b7280;">Valid for 10 minutes</p>
             </div>
             
             <div class="warning">
-              <strong>⚠️ Security Notice:</strong>
+              <strong>Security Notice:</strong>
               <p style="margin: 5px 0 0 0;">
                 This OTP is confidential. Do not share it with anyone. Our team will never ask for your OTP.
               </p>
@@ -52,12 +52,12 @@ const sendOTPEmail = async (email, otp, name) => {
             
             <p style="margin-top: 30px;">
               Best regards,<br>
-              <strong>Pettyca$h Team</strong>
+              <strong>Kambaa Petty Cash Team</strong>
             </p>
           </div>
           <div class="footer">
-            <p>This is an automated email. Please do not reply to this message.</p>
-            <p>&copy; ${new Date().getFullYear()} Pettyca$h Management System. All rights reserved.</p>
+            <p>This is an automated email from kambaa incorporation. Please do not reply to this message.</p>
+            <p>&copy; ${new Date().getFullYear()} Petty Cash Management System. All rights reserved.</p>
           </div>
         </div>
       </body>

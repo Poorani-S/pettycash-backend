@@ -6,7 +6,7 @@ const User = require("../models/User");
  */
 const notifyExpenseSubmitted = async (transaction, submitter, approvers) => {
   try {
-    const subject = `New Expense Awaiting Your Approval - ₹${transaction.postTaxAmount}`;
+    const subject = `New Expense Awaiting Your Approval - Rs.${transaction.postTaxAmount}`;
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -27,7 +27,7 @@ const notifyExpenseSubmitted = async (transaction, submitter, approvers) => {
       <body>
         <div class="container">
           <div class="header">
-            <h2 style="margin: 0;">📝 New Expense Submission</h2>
+            <h2 style="margin: 0;">New Expense Submission</h2>
             <p style="margin: 5px 0 0 0; opacity: 0.9;">Pending Your Approval</p>
           </div>
           <div class="content">
@@ -65,7 +65,7 @@ const notifyExpenseSubmitted = async (transaction, submitter, approvers) => {
             </div>
           </div>
           <div class="footer">
-            <p>This is an automated notification from Pettica$h Management System</p>
+            <p>This is an automated notification from Petty Cash Management System</p>
             <p>Please do not reply to this email</p>
           </div>
         </div>
@@ -122,7 +122,7 @@ const notifyExpenseStatusUpdate = async (
       <body>
         <div class="container">
           <div class="header">
-            <h2 style="margin: 0;">${statusIcon} Expense ${isApproved ? "Approved" : "Rejected"}</h2>
+            <h2 style="margin: 0;">Expense ${isApproved ? "Approved" : "Rejected"}</h2>
             <p style="margin: 5px 0 0 0; opacity: 0.9;">${transaction.transactionNumber}</p>
           </div>
           <div class="content">
@@ -166,7 +166,7 @@ const notifyExpenseStatusUpdate = async (
             </div>
           </div>
           <div class="footer">
-            <p>This is an automated notification from Pettica$h Management System</p>
+            <p>This is an automated notification from Petty Cash Management System</p>
             <p>Please do not reply to this email</p>
           </div>
         </div>
@@ -213,7 +213,7 @@ const notifyAdditionalInfoRequested = async (
       <body>
         <div class="container">
           <div class="header">
-            <h2 style="margin: 0;">ℹ️ Additional Information Requested</h2>
+            <h2 style="margin: 0;">Additional Information Requested</h2>
             <p style="margin: 5px 0 0 0; opacity: 0.9;">${transaction.transactionNumber}</p>
           </div>
           <div class="content">
@@ -241,7 +241,7 @@ const notifyAdditionalInfoRequested = async (
             </div>
           </div>
           <div class="footer">
-            <p>This is an automated notification from Pettica$h Management System</p>
+            <p>This is an automated notification from Petty Cash Management System</p>
             <p>Please do not reply to this email</p>
           </div>
         </div>
@@ -266,7 +266,7 @@ const sendUserInvitation = async (
   additionalEmails = [],
 ) => {
   try {
-    const subject = `🎉 Welcome to Pettica$h - Account Created & Ready to Use`;
+    const subject = `Welcome to Petty Cash - Your Account is Ready`;
 
     // Prepare email recipients: send only to the user's email address
     let recipients = [user.email];
@@ -276,24 +276,8 @@ const sendUserInvitation = async (
       recipients = [...new Set([...recipients, ...additionalEmails])];
     }
 
-    // Auto-add .com/.in domain variant so invitation reaches both addresses
-    const emailParts = user.email.split("@");
-    if (emailParts.length === 2) {
-      const emailName = emailParts[0];
-      const emailDomain = emailParts[1];
-      let domainVariant = null;
-      if (emailDomain.endsWith(".com")) {
-        domainVariant = `${emailName}@${emailDomain.replace(/\.com$/, ".in")}`;
-      } else if (emailDomain.endsWith(".in")) {
-        domainVariant = `${emailName}@${emailDomain.replace(/\.in$/, ".com")}`;
-      }
-      if (domainVariant && domainVariant !== user.email) {
-        recipients = [...new Set([...recipients, domainVariant])];
-        console.log(
-          `📧 Adding domain variant for invitation: ${domainVariant}`,
-        );
-      }
-    }
+    // NOTE: Domain variant auto-add removed — sending to non-existent
+    // addresses causes bounces that damage sender reputation on AWS SES.
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -332,7 +316,7 @@ const sendUserInvitation = async (
       <body>
         <div class="container">
           <div class="header">
-            <h1>🎉 Welcome to Pettica$h!</h1>
+            <h1>Welcome to Petty Cash!</h1>
             <p>Your Account is Ready - Let's Get Started</p>
           </div>
           <div class="content">
@@ -342,10 +326,10 @@ const sendUserInvitation = async (
             </div>
 
             <div class="user-info-box">
-              <div class="user-info-title">👤 Your Account Information</div>
+              <div class="user-info-title">Your Account Information</div>
               
               <div class="credential-row">
-                <span class="credential-label">📧 Login Email (User ID):</span>
+                <span class="credential-label">Login Email (User ID):</span>
                 <div class="credential-value">${user.email}</div>
               </div>
 
@@ -353,7 +337,7 @@ const sendUserInvitation = async (
                 tempPassword
                   ? `
               <div class="credential-row">
-                <span class="credential-label">🔐 Temporary Password:</span>
+                <span class="credential-label">Temporary Password:</span>
                 <div class="credential-value">${tempPassword}</div>
               </div>
               `
@@ -361,7 +345,7 @@ const sendUserInvitation = async (
               }
 
               <div class="credential-row">
-                <span class="credential-label">👥 Role:</span>
+                <span class="credential-label">Role:</span>
                 <div class="credential-value">${user.role.charAt(0).toUpperCase() + user.role.slice(1).toUpperCase()}</div>
               </div>
 
@@ -369,7 +353,7 @@ const sendUserInvitation = async (
                 user.approvalLimit
                   ? `
               <div class="credential-row">
-                <span class="credential-label">💰 Approval Limit:</span>
+                <span class="credential-label">Approval Limit:</span>
                 <div class="credential-value">₹${user.approvalLimit.toLocaleString()}</div>
               </div>
               `
@@ -381,7 +365,7 @@ const sendUserInvitation = async (
               tempPassword
                 ? `
             <div class="security-warning">
-              <strong>⚠️ Important Security Notice:</strong>
+              <strong>Important Security Notice:</strong>
               <p>✓ Keep your password confidential and do not share it with anyone</p>
               <p>✓ Consider changing your password on first login for added security</p>
               <p>✓ Always logout when you're done using the system, especially on shared computers</p>
@@ -391,7 +375,7 @@ const sendUserInvitation = async (
             }
 
             <div class="login-info">
-              <h3>🔓 How to Access Your Account</h3>
+              <h3>How to Access Your Account</h3>
               
               <div class="access-methods">
                 <h3>Two Methods to Login:</h3>
@@ -406,21 +390,21 @@ const sendUserInvitation = async (
 
             <div style="text-align: center;">
               <a href="${process.env.FRONTEND_URL || "http://localhost:5173"}/login" class="login-button">
-                ➜ Login to Pettica$h
+                Login to Petty Cash
               </a>
             </div>
 
             <div class="support-section">
-              <strong>📧 Need Help?</strong>
+              <strong>Need Help?</strong>
               <p>If you experience any issues accessing your account or have questions about using the system, please contact your system administrator.</p>
             </div>
 
             <p style="color: #666; font-size: 14px; margin-top: 30px;">
-              Thank you for being part of the Pettica$h ecosystem. We're committed to making petty cash management efficient and transparent for your organization.
+              Thank you for being part of the Petty Cash ecosystem. We're committed to making petty cash management efficient and transparent for your organization.
             </p>
           </div>
           <div class="footer">
-            <p><strong>Pettica$h</strong> - Petty Cash Management System</p>
+            <p><strong>Petty Cash</strong> - Petty Cash Management System</p>
             <p>This is an automated invitation email. Please do not reply to this message.</p>
             <p>Email sent on ${new Date().toLocaleString("en-IN")}</p>
           </div>
@@ -464,7 +448,7 @@ const notifyAdminFailedLogin = async (user) => {
       return { success: false, error: "No admins found" };
     }
 
-    const subject = `🚨 Security Alert: Multiple Failed Login Attempts - ${user.name}`;
+    const subject = `Security Alert: Multiple Failed Login Attempts - ${user.name}`;
 
     const htmlContent = `
       <!DOCTYPE html>
@@ -485,12 +469,12 @@ const notifyAdminFailedLogin = async (user) => {
       <body>
         <div class="container">
           <div class="header">
-            <h2 style="margin: 0;">🚨 Security Alert</h2>
+            <h2 style="margin: 0;">Security Alert</h2>
             <p style="margin: 5px 0 0 0; opacity: 0.9;">Multiple Failed Login Attempts Detected</p>
           </div>
           <div class="content">
             <div class="alert-box">
-              <strong>⚠️ Action Required:</strong> A user account has been locked due to multiple failed login attempts.
+              <strong>Action Required:</strong> A user account has been locked due to multiple failed login attempts.
             </div>
             
             <p>The following user has exceeded the maximum number of failed login attempts:</p>
@@ -534,7 +518,7 @@ const notifyAdminFailedLogin = async (user) => {
             </div>
           </div>
           <div class="footer">
-            <p>This is an automated security notification from Pettica$h Management System</p>
+            <p>This is an automated security notification from Petty Cash Management System</p>
             <p>Please do not reply to this email</p>
           </div>
         </div>
@@ -565,7 +549,7 @@ const sendTransactionHistoryToAdmin = async (transactions, period) => {
       return { success: false, error: "No admins found" };
     }
 
-    const subject = `📊 Transaction History Report - ${period}`;
+    const subject = `Transaction History Report - ${period}`;
 
     let transactionRows = "";
     let totalAmount = 0;
@@ -608,7 +592,7 @@ const sendTransactionHistoryToAdmin = async (transactions, period) => {
       <body>
         <div class="container">
           <div class="header">
-            <h2 style="margin: 0;">📊 Transaction History Report</h2>
+            <h2 style="margin: 0;">Transaction History Report</h2>
             <p style="margin: 5px 0 0 0; opacity: 0.9;">Period: ${period}</p>
           </div>
           <div class="content">
@@ -641,7 +625,7 @@ const sendTransactionHistoryToAdmin = async (transactions, period) => {
             </table>
           </div>
           <div class="footer">
-            <p>This is an automated report from Pettica$h Management System</p>
+            <p>This is an automated report from Petty Cash Management System</p>
             <p>Generated on ${new Date().toLocaleString()}</p>
           </div>
         </div>

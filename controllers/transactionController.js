@@ -54,21 +54,8 @@ exports.getTransactions = async (req, res) => {
         { submittedBy: req.user._id },
         { requestedBy: req.user._id },
       ];
-    } else if (req.user.role === "manager" || req.user.role === "approver") {
-      // Managers can see:
-      // 1. Their own transactions
-      // 2. Transactions submitted by their team members (employees/interns under them)
-      const teamMembers = await User.find({ managerId: req.user._id }, "_id");
-      const teamMemberIds = teamMembers.map((member) => member._id);
-
-      roleFilter = [
-        { submittedBy: req.user._id },
-        { requestedBy: req.user._id },
-        { submittedBy: { $in: teamMemberIds } },
-        { requestedBy: { $in: teamMemberIds } },
-      ];
     }
-    // Admin, employee, and auditor can see all transactions
+    // Admin, manager, approver, and auditor can see all transactions
 
     if (status) query.status = status;
     if (category) query.category = category;
@@ -148,32 +135,8 @@ exports.getTransaction = async (req, res) => {
           message: "Not authorized to view this transaction",
         });
       }
-    } else if (req.user.role === "manager" || req.user.role === "approver") {
-      // Managers can view their own transactions and their team members' transactions
-      const isOwner =
-        transaction.submittedBy?._id.toString() === req.user._id.toString() ||
-        transaction.requestedBy?._id.toString() === req.user._id.toString();
-
-      if (!isOwner) {
-        // Check if transaction belongs to a team member
-        const teamMembers = await User.find({ managerId: req.user._id }, "_id");
-        const teamMemberIds = teamMembers.map((member) =>
-          member._id.toString(),
-        );
-
-        const isTeamTransaction =
-          teamMemberIds.includes(transaction.submittedBy?._id.toString()) ||
-          teamMemberIds.includes(transaction.requestedBy?._id.toString());
-
-        if (!isTeamTransaction) {
-          return res.status(403).json({
-            success: false,
-            message: "Not authorized to view this transaction",
-          });
-        }
-      }
     }
-    // Admin, employee, and auditor can view all transactions
+    // Admin, manager, approver, and auditor can view all transactions
 
     res.status(200).json({
       success: true,

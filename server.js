@@ -40,7 +40,12 @@ const corsOptions = {
     // Allow requests with no origin (like mobile apps, Postman, curl)
     if (!origin) return callback(null, true);
 
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    // Allow ngrok tunnels for local testing
+    if (
+      allowedOrigins.indexOf(origin) !== -1 ||
+      origin.endsWith(".ngrok-free.dev") ||
+      origin.endsWith(".ngrok.io")
+    ) {
       callback(null, true);
     } else {
       callback(new Error(`Origin ${origin} not allowed by CORS`));
